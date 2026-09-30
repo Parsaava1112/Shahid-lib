@@ -1,28 +1,12 @@
-import 'package:hive_io/hive_io.dart';
+// lib/models/user_profile.dart
 
-part 'user_profile.g.dart';
-
-@HiveType(typeId: 1)
 class UserProfile {
-  @HiveField(0)
   final String id;
-  
-  @HiveField(1)
   final String name;
-  
-  @HiveField(2)
   final String diceBearSeed;
-  
-  @HiveField(3)
   final String avatarStyle;
-  
-  @HiveField(4)
   final int themeColor;
-  
-  @HiveField(5)
   final bool isDarkMode;
-  
-  @HiveField(6)
   final List<String> favoriteBookIds;
 
   UserProfile({
@@ -34,6 +18,33 @@ class UserProfile {
     this.isDarkMode = false,
     this.favoriteBookIds = const [],
   });
+
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    return UserProfile(
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? '',
+      diceBearSeed: json['diceBearSeed'] ?? '',
+      avatarStyle: json['avatarStyle'] ?? 'adventurer',
+      themeColor: json['themeColor'] ?? 0xFF1B5E20,
+      isDarkMode: json['isDarkMode'] ?? false,
+      favoriteBookIds: (json['favoriteBookIds'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'diceBearSeed': diceBearSeed,
+      'avatarStyle': avatarStyle,
+      'themeColor': themeColor,
+      'isDarkMode': isDarkMode,
+      'favoriteBookIds': favoriteBookIds,
+    };
+  }
 
   UserProfile copyWith({
     String? name,

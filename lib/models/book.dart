@@ -1,46 +1,19 @@
-import 'package:hive_io/hive_io.dart';
+// lib/models/book.dart
 
-part 'book.g.dart';
-
-@HiveType(typeId: 0)
 class Book {
-  @HiveField(0)
   final String id;
-  
-  @HiveField(1)
   final String title;
-  
-  @HiveField(2)
   final String author;
-  
-  @HiveField(3)
   final String description;
-  
-  @HiveField(4)
   final String coverUrl;
-  
-  @HiveField(5)
   final String? pdfUrl;
-  
-  @HiveField(6)
   final String? audioUrl;
-  
-  @HiveField(7)
+  final String? videoUrl;       // اضافه شد
   final bool isPdfDownloaded;
-  
-  @HiveField(8)
   final bool isAudioDownloaded;
-  
-  @HiveField(9)
   final String? localPdfPath;
-  
-  @HiveField(10)
   final String? localAudioPath;
-  
-  @HiveField(11)
   final String category;
-  
-  @HiveField(12)
   final double rating;
 
   Book({
@@ -51,6 +24,7 @@ class Book {
     required this.coverUrl,
     this.pdfUrl,
     this.audioUrl,
+    this.videoUrl,
     this.isPdfDownloaded = false,
     this.isAudioDownloaded = false,
     this.localPdfPath,
@@ -59,19 +33,55 @@ class Book {
     this.rating = 0.0,
   });
 
+  // ─────────────────────────────────────────
+  //  fromJson — برای دریافت از API و ReaxDB
+  // ─────────────────────────────────────────
+
   factory Book.fromJson(Map<String, dynamic> json) {
     return Book(
-      id: json['id'] ?? '',
+      id: json['id']?.toString() ?? '',
       title: json['title'] ?? '',
       author: json['author'] ?? '',
       description: json['description'] ?? '',
       coverUrl: json['coverUrl'] ?? '',
       pdfUrl: json['pdfUrl'],
       audioUrl: json['audioUrl'],
+      videoUrl: json['videoUrl'],
+      isPdfDownloaded: json['isPdfDownloaded'] ?? false,
+      isAudioDownloaded: json['isAudioDownloaded'] ?? false,
+      localPdfPath: json['localPdfPath'],
+      localAudioPath: json['localAudioPath'],
       category: json['category'] ?? 'عمومی',
       rating: (json['rating'] ?? 0.0).toDouble(),
     );
   }
+
+  // ─────────────────────────────────────────
+  //  toJson — برای ذخیره در ReaxDB
+  // ─────────────────────────────────────────
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'author': author,
+      'description': description,
+      'coverUrl': coverUrl,
+      'pdfUrl': pdfUrl,
+      'audioUrl': audioUrl,
+      'videoUrl': videoUrl,
+      'isPdfDownloaded': isPdfDownloaded,
+      'isAudioDownloaded': isAudioDownloaded,
+      'localPdfPath': localPdfPath,
+      'localAudioPath': localAudioPath,
+      'category': category,
+      'rating': rating,
+    };
+  }
+
+  // ─────────────────────────────────────────
+  //  copyWith
+  // ─────────────────────────────────────────
 
   Book copyWith({
     bool? isPdfDownloaded,
@@ -87,6 +97,7 @@ class Book {
       coverUrl: coverUrl,
       pdfUrl: pdfUrl,
       audioUrl: audioUrl,
+      videoUrl: videoUrl,
       isPdfDownloaded: isPdfDownloaded ?? this.isPdfDownloaded,
       isAudioDownloaded: isAudioDownloaded ?? this.isAudioDownloaded,
       localPdfPath: localPdfPath ?? this.localPdfPath,

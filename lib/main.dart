@@ -1,3 +1,5 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_background/just_audio_background.dart';
@@ -7,17 +9,17 @@ import 'screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // راه‌اندازی Hive
+
+  // راه‌اندازی ReaxDB (جایگزین Hive)
   await LocalStorageService.init();
-  
+
   // راه‌اندازی پخش صوتی در پس‌زمینه
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.shahidsoleimani.library.channel.audio',
     androidNotificationChannelName: 'پخش کتاب صوتی',
     androidNotificationOngoing: true,
   );
-  
+
   runApp(
     const ProviderScope(
       child: ShahidSoleimaniLibraryApp(),

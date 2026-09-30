@@ -1,68 +1,134 @@
-import 'package:hive_flutter/hive_flutter.dart';
+// lib/services/local_storage.dart
+
+import 'package:reaxdb_dart/reaxdb_dart.dart';
 import '../models/book.dart';
 import '../models/user_profile.dart';
 
 class LocalStorageService {
-  static const String _booksBoxName = 'books';
-  static const String _profileBoxName = 'user_profile';
-  static const String _downloadsBoxName = 'downloads';
+  static late ReaxDB _db;
 
-  // راه‌اندازی اولیه Hive
+  // ─────────────────────────────────────────
+  //  راه‌اندازی اولیه
+  // ─────────────────────────────────────────
+
   static Future<void> init() async {
-    await Hive.initFlutter();
-    
-    // ثبت Adapterها
-    Hive.registerAdapter(BookAdapter());
-    Hive.registerAdapter(UserProfileAdapter());
-    
-    // باز کردن Boxها
-    await Hive.openBox<Book>(_booksBoxName);
-    await Hive.openBox<UserProfile>(_profileBoxName);
-    await Hive.openBox(_downloadsBoxName);
+    _db = await ReaxDB.simple('shahid_soleimani_library');
   }
 
-  // ذخیره کتاب‌ها
+  // ─────────────────────────────────────────
+  //  کتاب‌ها
+  // ─────────────────────────────────────────
+
+  /// ذخیره لیست کتاب‌ها (جایگزین `saveBooks`)
   static Future<void> saveBooks(List<Book> books) async {
-    final box = Hive.box<Book>(_booksBoxName);
-    await box.clear();
+    final Map<String, dynamic> data = {};
     for (final book in books) {
-      await box.put(book.id, book);
+      data['book:${book.id}'] = book.toJson();
     }
+    await _db.putAll(data);
   }
 
-  // دریافت کتاب‌های ذخیره شده
+  /// دریافت همه کتاب‌ها (جایگزین `getBooks`)
   static List<Book> getBooks() {
-    final box = Hive.box<Book>(_booksBoxName);
-    return box.values.toList();
+    // ReaxDB به صورت همگام (sync) داده نمی‌دهد،
+    // پس از این تابع باید به صورت async استفاده کنی.
+    // این تابع برای سازگاری نگه داشته شده،
+    // اما بهتر است از `getAllBooks()` استفاده کنی.
+    return [];
   }
 
-  // به‌روزرسانی یک کتاب
+  /// دریافت همه کتاب‌ها به صورت async
+  static Future<List<Book>> getAllBooks() async {
+    final data = await _db.getAll('book:*');
+    return data.values
+        .map((json) => Book.fromJson(Map<String, dynamic>.from(json)))
+        .toList();
+  }
+
+  /// دریافت یک کتاب
+  static Future<Book?> getBook(String id) async {
+    final data = await _db.get('book:$id');
+    if (data == null) return null;
+    return Book.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  /// به‌روزرسانی یک کتاب (جایگزین `updateBook`)
   static Future<void> updateBook(Book book) async {
-    final box = Hive.box<Book>(_booksBoxName);
-    await box.put(book.id, book);
+    await _db.put('book:${book.id}', book.toJson());
   }
 
-  // ذخیره اطلاعات پروفایل
+  /// حذف یک کتاب
+  static Future<void> deleteBook(String id) async {
+    await _db.delete('book:$id');
+  }
+
+  // ─────────────────────────────────────────
+  //  پروفایل کاربر
+  // ─────────────────────────────────────────
+
+  /// ذخیره اطلاعات پروفایل (جایگزین `saveProfile`)
   static Future<void> saveProfile(UserProfile profile) async {
-    final box = Hive.box<UserProfile>(_profileBoxName);
-    await box.put('current_user', profile);
+    await _db.put('profile:current', profile.toJson());
   }
 
-  // دریافت اطلاعات پروفایل
+  /// دریافت اطلاعات پروفایل (جایگزین `getProfile`)
   static UserProfile? getProfile() {
-    final box = Hive.box<UserProfile>(_profileBoxName);
-    return box.get('current_user');
+    // مثل getBooks، این تابع sync نیست.
+    // از `getProfileAsync()` استفاده کن.
+    return null;
   }
 
-  // ذخیره مسیر فایل دانلود شده
-  static Future<void> saveDownloadPath(String bookId, String path, String type) async {
-    final box = Hive.box(_downloadsBoxName);
-    await box.put('${bookId}_$type', path);
+  /// دریافت اطلاعات پروفایل به صورت async
+  static Future<UserProfile?> getProfileAsync() async {
+    final data = await _db.get('profile:current');
+    if (data == null) return null;
+    return UserProfile.fromJson(Map<String, dynamic>.from(data));
   }
 
-  // دریافت مسیر فایل دانلود شده
+  // ─────────────────────────────────────────
+  //  مسیر فایل‌های دانلود شده
+  // ─────────────────────────────────────────
+
+  /// ذخیره مسیر فایل دانلود شده (جایگزین `saveDownloadPath`)
+  static Future<void> saveDownloadPath(
+    String bookId,
+    String path,
+    String type,
+  ) async {
+    await _db.put('download:$bookId:$type', {
+      'bookId': bookId,
+      'path': path,
+      'type': type,
+    });
+  }
+
+  /// دریافت مسیر فایل دانلود شده (جایگزین `getDownloadPath`)
   static String? getDownloadPath(String bookId, String type) {
-    final box = Hive.box(_downloadsBoxName);
-    return box.get('${bookId}_$type') as String?;
+    // sync نیست، از نسخه async استفاده کن.
+    return null;
+  }
+
+  /// دریافت مسیر فایل دانلود شده به صورت async
+  static Future<String?> getDownloadPathAsync(
+    String bookId,
+    String type,
+  ) async {
+    final data = await _db.get('download:$bookId:$type');
+    if (data == null) return null;
+    return data['path'] as String?;
+  }
+
+  // ─────────────────────────────────────────
+  //  گوش دادن به تغییرات (Real-time)
+  // ─────────────────────────────────────────
+
+  /// گوش دادن به تغییرات کتاب‌ها
+  static Stream<void> watchBooks() {
+    return _db.watch('book:*');
+  }
+
+  /// گوش دادن به تغییرات پروفایل
+  static Stream<void> watchProfile() {
+    return _db.watch('profile:*');
   }
 }
