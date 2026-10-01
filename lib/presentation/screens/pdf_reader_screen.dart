@@ -1,63 +1,52 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:pdf_viewer_pro/pdf_viewer_pro.dart';
+import 'package:pdfrx/pdfrx.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../data/models/book_model.dart';
 
-class PdfReaderScreen extends StatelessWidget {
-  final String filePath;
-  final String title;
-  final int bookId;
+class PdfViewerScreen extends StatefulWidget {
+  final BookModel book;
 
-  const PdfReaderScreen({
-    super.key,
-    required this.filePath,
-    required this.title,
-    required this.bookId,
-  });
+  const PdfViewerScreen({super.key, required this.book});
 
   @override
+  State<PdfViewerScreen> createState() => _PdfViewerScreenState();
+}
+
+class _PdfViewerScreenState extends State<PdfViewerScreen> {
+  @override
   Widget build(BuildContext context) {
-    // اگر فایل وجود دارد
-    if (File(filePath).existsSync()) {
-      return PdfViewerScreen(
-        filePath: filePath,
-        title: title,
-        bookId: bookId,
-        serviceConfig: PdfViewerServiceConfig(
-          authToken: 'your-jwt-token',
-          isLoggedIn: true,
-          onBookmarksSync: (bookId, bookmarks) async {
-            // همگام‌سازی نشانک‌ها با سرور
-            print('Syncing bookmarks for book $bookId: $bookmarks');
-          },
-          onMessage: (msg, type) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(msg)),
-            );
-          },
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.book.title,
+          style: GoogleFonts.vazirmatn(),
         ),
-      );
-    } else {
-      // اگر فایل دانلود نشده، صفحه دانلود نمایش داده شود
-      return Scaffold(
-        appBar: AppBar(title: Text(title)),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.download, size: 80),
-              const SizedBox(height: 16),
-              const Text('این کتاب هنوز دانلود نشده است'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  // منطق دانلود فایل
-                },
-                child: const Text('دانلود کتاب'),
-              ),
-            ],
-          ),
+      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    final file = File(widget.book.filePath);
+    if (!file.existsSync()) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.download, size: 80),
+            const SizedBox(height: 16),
+            Text(
+              'این کتاب هنوز دانلود نشده است',
+              style: GoogleFonts.vazirmatn(),
+            ),
+          ],
         ),
       );
     }
+
+    return PdfViewer.file(
+      widget.book.filePath,
+    );
   }
 }

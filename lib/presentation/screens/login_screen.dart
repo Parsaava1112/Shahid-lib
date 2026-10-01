@@ -1,247 +1,284 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:animate_do/animate_do.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../models/book.dart';
-import '../providers/user_provider.dart';
-import 'pdf_viewer_screen.dart';
-import 'audio_player_screen.dart';
 
-class BookDetailScreen extends ConsumerWidget {
-  final Book book;
+import '../../core/database/db_helper.dart';
+import '../../data/models/user_model.dart';
+import '../../core/utils/national_code_validator.dart';
+import '../../services/api_service.dart';
+import 'home_screen.dart';
 
-  const BookDetailScreen({super.key, required this.book});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(userProfileProvider);
-    final isFavorite = user?.favoriteBookIds.contains(book.id) ?? false;
+  State<LoginScreen> createState() => _LoginScreenState();
+}
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
-            // AppBar با تصویر جلد
-            SliverAppBar(
-              expandedHeight: 300,
-              pinned: true,
-              flexibleSpace: FlexibleSpaceBar(
-                background: Hero(
-                  tag: 'book_cover_${book.id}',
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.network(
-                        book.coverUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.book, size: 100),
-                        ),
-                      ),
-                      // گرادینت روی تصویر
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withOpacity(0.7),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                // دکمه علاقه‌مندی
-                IconButton(
-                  icon: Icon(
-                    isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: isFavorite ? Colors.red : Colors.white,
-                  ),
-                  onPressed: () {
-                    ref.read(userProfileProvider.notifier).toggleFavorite(book.id);
-                  },
-                ),
-              ],
-            ),
-            
-            // اطلاعات کتاب
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
+class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _codeController = TextEditingController();
+  bool _isLoading = false;
+  bool _obscureCode = false;
+
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+
+    final name = _nameController.text.trim();
+    final code = _codeController.text.trim();
+
+    try {
+      // ۱. تلاش برای اتصال به سرور
+      final result = await ApiService.login(
+        name: name,
+        nationalCode: code,
+      );
+
+      if (result['success'] == true) {
+        final user = result['user'] as UserModel;
+        await ApiService.setCurrentUser(user);
+        await _goToHome();
+        return;
+      }
+
+      // ۲. اگر سرور در دسترس نبود، از دیتابیس محلی استفاده کن
+      if (result['offline'] == true) {
+        final existing = await DBHelper.getUserByNationalCode(code);
+        if (existing != null) {
+          await ApiService.setCurrentUser(existing);
+          await _goToHome();
+          return;
+        } else {
+          // ثبت‌نام محلی
+          final user = UserModel(
+            name: name,
+            nationalCode: code,
+            avatarSeed: code,
+            avatarStyle: 'adventurer',
+          );
+          final id = await DBHelper.insertUser(user);
+          final saved = UserModel(
+            id: id,
+            name: name,
+            nationalCode: code,
+            avatarSeed: code,
+            avatarStyle: 'adventurer',
+          );
+          await ApiService.setCurrentUser(saved);
+          await _goToHome();
+          return;
+        }
+      }
+
+      // ۳. خطای دیگر
+      if (mounted) {
+        _showError(result['error'] ?? 'خطای نامشخص');
+      }
+    } catch (e) {
+      if (mounted) _showError('خطا: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _goToHome() async {
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade700,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              theme.colorScheme.primary,
+              theme.colorScheme.primary.withOpacity(0.7),
+              theme.colorScheme.background,
+            ],
+            stops: const [0.0, 0.4, 0.8],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    FadeInUp(
-                      child: Text(
-                        book.title,
-                        style: GoogleFonts.vazirmatn(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
+                    // ==================== لوگو ====================
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 2,
                         ),
                       ),
-                    ),
+                      child: const Icon(
+                        Icons.library_books,
+                        size: 70,
+                        color: Colors.white,
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(duration: 800.ms)
+                        .scale(delay: 200.ms, duration: 600.ms),
+
+                    const SizedBox(height: 24),
+
+                    // ==================== عنوان ====================
+                    Text(
+                      'کتابخانه شهید حاج قاسم سلیمانی',
+                      style: GoogleFonts.vazirmatn(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                    )
+                        .animate()
+                        .fadeIn(delay: 400.ms, duration: 600.ms)
+                        .slideY(begin: 0.3, end: 0),
+
                     const SizedBox(height: 8),
-                    FadeInUp(
-                      delay: const Duration(milliseconds: 100),
-                      child: Text(
-                        'نویسنده: ${book.author}',
-                        style: GoogleFonts.vazirmatn(
-                          fontSize: 16,
-                          color: Colors.grey[600],
-                        ),
+
+                    Text(
+                      'لطفاً برای ورود اطلاعات خود را وارد کنید',
+                      style: GoogleFonts.vazirmatn(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.85),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // امتیاز و دسته‌بندی
-                    FadeInUp(
-                      delay: const Duration(milliseconds: 200),
-                      child: Row(
-                        children: [
-                          _buildInfoChip(
-                            icon: Icons.star,
-                            label: book.rating.toStringAsFixed(1),
-                            color: Colors.amber,
-                          ),
-                          const SizedBox(width: 12),
-                          _buildInfoChip(
-                            icon: Icons.category,
-                            label: book.category,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    
-                    // دکمه‌های عملیات
-                    FadeInUp(
-                      delay: const Duration(milliseconds: 300),
-                      child: Row(
-                        children: [
-                          if (book.pdfUrl != null)
-                            Expanded(
-                              child: _buildActionButton(
-                                context,
-                                icon: Icons.menu_book,
-                                label: 'خواندن کتاب',
-                                color: Theme.of(context).primaryColor,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => PdfViewerScreen(book: book),
-                                    ),
-                                  );
-                                },
+                    ).animate().fadeIn(delay: 600.ms, duration: 600.ms),
+
+                    const SizedBox(height: 40),
+
+                    // ==================== فرم ====================
+                    Card(
+                      elevation: 8,
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            TextFormField(
+                              controller: _nameController,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'نام و نام خانوادگی',
+                                prefixIcon: Icon(Icons.person_outline),
                               ),
-                            ),
-                          if (book.pdfUrl != null && book.audioUrl != null)
-                            const SizedBox(width: 12),
-                          if (book.audioUrl != null)
-                            Expanded(
-                              child: _buildActionButton(
-                                context,
-                                icon: Icons.headphones,
-                                label: 'کتاب صوتی',
-                                color: Colors.blue,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => AudioPlayerScreen(book: book),
-                                    ),
-                                  );
-                                },
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) {
+                                  return 'نام را وارد کنید';
+                                }
+                                if (v.trim().length < 3) {
+                                  return 'نام باید حداقل ۳ حرف باشد';
+                                }
+                                return null;
+                              },
+                            )
+                                .animate()
+                                .fadeIn(delay: 800.ms)
+                                .slideX(begin: -0.2, end: 0),
+
+                            const SizedBox(height: 16),
+
+                            TextFormField(
+                              controller: _codeController,
+                              keyboardType: TextInputType.number,
+                              maxLength: 10,
+                              obscureText: _obscureCode,
+                              decoration: InputDecoration(
+                                labelText: 'کد ملی',
+                                prefixIcon: const Icon(Icons.badge_outlined),
+                                counterText: '',
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscureCode
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                  ),
+                                  onPressed: () {
+                                    setState(
+                                      () => _obscureCode = !_obscureCode,
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    
-                    // توضیحات
-                    FadeInUp(
-                      delay: const Duration(milliseconds: 400),
-                      child: Text(
-                        'درباره کتاب',
-                        style: GoogleFonts.vazirmatn(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                              validator: (v) =>
+                                  NationalCodeValidator.validate(v),
+                            )
+                                .animate()
+                                .fadeIn(delay: 1000.ms)
+                                .slideX(begin: -0.2, end: 0),
+
+                            const SizedBox(height: 24),
+
+                            SizedBox(
+                              width: double.infinity,
+                              height: 52,
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _login,
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text(
+                                        'ورود به کتابخانه',
+                                        style: TextStyle(fontSize: 16),
+                                      ),
+                              ),
+                            )
+                                .animate()
+                                .fadeIn(delay: 1200.ms)
+                                .scale(),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    FadeInUp(
-                      delay: const Duration(milliseconds: 500),
-                      child: Text(
-                        book.description,
-                        style: GoogleFonts.vazirmatn(
-                          fontSize: 15,
-                          height: 1.8,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                    ),
+                    )
+                        .animate()
+                        .fadeIn(delay: 700.ms, duration: 600.ms)
+                        .slideY(begin: 0.2, end: 0),
                   ],
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(color: color, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return ElevatedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon),
-      label: Text(
-        label,
-        style: GoogleFonts.vazirmatn(),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
     );

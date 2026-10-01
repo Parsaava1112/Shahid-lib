@@ -42,7 +42,7 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
+              const Icon(
                 Icons.library_books,
                 size: 120,
                 color: Colors.white,
@@ -60,13 +60,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 textAlign: TextAlign.center,
               )
                   .animate()
-                  .fadeIn(delay: 600.ms, duration: 800.ms)
-                  .slideY(begin: 0.3, end: 0),
-              const SizedBox(height: 16),
-              const Text(
-                'در حال آماده‌سازی...',
-                style: TextStyle(color: Colors.white70),
-              ).animate().fadeIn(delay: 1000.ms),
+                  .fadeIn(delay: 600.ms, duration: 800.ms),
             ],
           ),
         ),

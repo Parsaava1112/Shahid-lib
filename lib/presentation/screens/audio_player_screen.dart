@@ -2,18 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../data/models/book_model.dart';
 
 class AudioPlayerScreen extends StatefulWidget {
-  final String audioUrl;
-  final String title;
-  final String artist;
+  final BookModel book;
 
-  const AudioPlayerScreen({
-    super.key,
-    required this.audioUrl,
-    required this.title,
-    required this.artist,
-  });
+  const AudioPlayerScreen({super.key, required this.book});
 
   @override
   State<AudioPlayerScreen> createState() => _AudioPlayerScreenState();
@@ -34,29 +29,39 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
 
   Future<void> _initPlayer() async {
     try {
-      await _player.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(widget.audioUrl),
-          tag: MediaItem(
-            id: '1',
-            title: widget.title,
-            artist: widget.artist,
-          ),
-        ),
-      );
-      _duration = _player.duration ?? Duration.zero;
-      _player.playerStateStream.listen((state) {
-        if (mounted) {
-          setState(() {
-            _isPlaying = state.playing;
-          });
-        }
+      final source = widget.book.filePath.isNotEmpty
+          ? AudioSource.file(
+              widget.book.filePath,
+              tag: MediaItem(
+                id: widget.book.id.toString(),
+                title: widget.book.title,
+                artist: widget.book.author,
+              ),
+            )
+          : AudioSource.uri(
+              Uri.parse(widget.book.fileUrl),
+              tag: MediaItem(
+                id: widget.book.id.toString(),
+                title: widget.book.title,
+                artist: widget.book.author,
+              ),
+            );
+
+      await _player.setAudioSource(source);
+
+      _player.durationStream.listen((d) {
+        if (mounted && d != null) setState(() => _duration = d);
       });
-      _player.positionStream.listen((pos) {
-        if (mounted) setState(() => _position = pos);
+
+      _player.playerStateStream.listen((s) {
+        if (mounted) setState(() => _isPlaying = s.playing);
+      });
+
+      _player.positionStream.listen((p) {
+        if (mounted) setState(() => _position = p);
       });
     } catch (e) {
-      debugPrint('Error initializing audio: $e');
+      debugPrint('Error: $e');
     }
   }
 
@@ -70,11 +75,15 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(
+          widget.book.title,
+          style: GoogleFonts.vazirmatn(),
+        ),
+      ),
       body: Column(
         children: [
           const Spacer(),
-          // کاور
           Container(
             width: 200,
             height: 200,
@@ -85,61 +94,51 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
                   theme.colorScheme.primary,
                   theme.colorScheme.secondary,
                 ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
               ),
             ),
-            child: Icon(
+            child: const Icon(
               Icons.headphones,
               size: 80,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white,
             ),
           ).animate().scale(duration: 600.ms).fadeIn(),
           const SizedBox(height: 32),
           Text(
-            widget.title,
-            style: theme.textTheme.headlineSmall?.copyWith(
+            widget.book.title,
+            style: GoogleFonts.vazirmatn(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
             textAlign: TextAlign.center,
-          ).animate().fadeIn(delay: 200.ms),
+          ),
           const SizedBox(height: 8),
           Text(
-            widget.artist,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
-            ),
-          ).animate().fadeIn(delay: 400.ms),
+            widget.book.author,
+            style: GoogleFonts.vazirmatn(fontSize: 14),
+          ),
           const Spacer(),
-          // نوار پیشرفت
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
                 Slider(
-                  value: _position.inSeconds.toDouble().clamp(
-                        0,
-                        _duration.inSeconds.toDouble(),
-                      ),
-                  max: _duration.inSeconds.toDouble().clamp(1, double.infinity),
-                  onChanged: (value) {
-                    _player.seek(Duration(seconds: value.toInt()));
-                  },
+                  value: _position.inSeconds
+                      .toDouble()
+                      .clamp(0, _duration.inSeconds.toDouble()),
+                  max: _duration.inSeconds.toDouble().clamp(1, 999999),
+                  onChanged: (v) =>
+                      _player.seek(Duration(seconds: v.toInt())),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_formatDuration(_position)),
-                      Text(_formatDuration(_duration)),
-                    ],
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_fmt(_position)),
+                    Text(_fmt(_duration)),
+                  ],
                 ),
               ],
             ),
           ),
-          // دکمه‌های کنترل
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -162,13 +161,8 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
                     _isPlaying ? Icons.pause : Icons.play_arrow,
                     color: Colors.white,
                   ),
-                  onPressed: () {
-                    if (_isPlaying) {
-                      _player.pause();
-                    } else {
-                      _player.play();
-                    }
-                  },
+                  onPressed: () =>
+                      _isPlaying ? _player.pause() : _player.play(),
                 ),
               ),
               const SizedBox(width: 16),
@@ -187,9 +181,9 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
     );
   }
 
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 }
