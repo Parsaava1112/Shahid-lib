@@ -1,63 +1,46 @@
-// lib/main.dart
-
+// main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import 'package:just_audio_background/just_audio_background.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'screens/splash_screen.dart';
+import 'core/theme/theme_controller.dart';
+import 'presentation/screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // دیگر نیازی به init دیتابیس نیست، در اولین استفاده خودکار ساخته می‌شود.
-  // JustAudioBackground.init() را نگه دارید.
   await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.shahidsoleimani.library.channel.audio',
-    androidNotificationChannelName: 'پخش کتاب صوتی',
+    androidNotificationChannelId: 'com.example.shahid_library.channel.audio',
+    androidNotificationChannelName: 'Shahid Library Audio',
     androidNotificationOngoing: true,
   );
-
-  runApp(
-    const ProviderScope(
-      child: ShahidSoleimaniLibraryApp(),
-    ),
-  );
+  runApp(const ShahidLibraryApp());
 }
 
-class ShahidSoleimaniLibraryApp extends ConsumerWidget {
-  const ShahidSoleimaniLibraryApp({super.key});
+class ShahidLibraryApp extends StatelessWidget {
+  const ShahidLibraryApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return MaterialApp(
-      title: 'کتابخانه شهید حاج قاسم سلیمانی',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1B5E20),
-          primary: const Color(0xFF1B5E20),
-        ),
-        textTheme: GoogleFonts.vazirmatnTextTheme(),
-        appBarTheme: AppBarTheme(
-          backgroundColor: const Color(0xFF1B5E20),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          titleTextStyle: GoogleFonts.vazirmatn(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        cardTheme: CardTheme(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => ThemeController(),
+      child: Consumer<ThemeController>(
+        builder: (context, themeController, _) {
+          return MaterialApp(
+            title: 'کتابخانه شهید حاج قاسم سلیمانی',
+            debugShowCheckedModeBanner: false,
+            theme: themeController.getTheme(Brightness.light),
+            darkTheme: themeController.getTheme(Brightness.dark),
+            themeMode: themeController.themeMode,
+            locale: const Locale('fa', 'IR'),
+            builder: (context, child) {
+              return Directionality(
+                textDirection: TextDirection.rtl,
+                child: child!,
+              );
+            },
+            home: const SplashScreen(),
+          );
+        },
       ),
-      locale: const Locale('fa', 'IR'),
-      home: const SplashScreen(),
     );
   }
 }

@@ -1,893 +1,412 @@
-"""
-═══════════════════════════════════════════════════════════════════════
-   بک‌اند کتابخانه شهید حاج قاسم سلیمانی
-   Flask + SQLAlchemy + JWT + File Upload (PDF/MP3/MP4)
-   نسخه ۲.۰.۰
-═══════════════════════════════════════════════════════════════════════
-   اجرا:  python app.py
-   سرور:  http://localhost:5000
-═══════════════════════════════════════════════════════════════════════
-"""
-
 import os
-import json
 import uuid
-from datetime import datetime, timedelta
-from functools import wraps
-
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from datetime import datetime
+from flask import Flask, request, jsonify, send_file, abort
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from flask_jwt_extended import (
-    JWTManager, create_access_token, jwt_required,
-    get_jwt_identity, verify_jwt_in_request,
-)
-from flask_bcrypt import Bcrypt
 from flask_cors import CORS
-from dotenv import load_dotenv
-from sqlalchemy import or_
 from werkzeug.utils import secure_filename
+from config import UPLOAD_FOLDER, DATABASE_URI, ALLOWED_EXTENSIONS, MAX_CONTENT_LENGTH
+from ai_engine import RuleBasedAIEngine
 
-# ═══════════════════════════════════════════════════════════════════
-#  ۱. پیکربندی مسیرها
-# ═══════════════════════════════════════════════════════════════════
+ai_engine = RuleBasedAIEngine()
 
-load_dotenv()
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# 🗄️ پوشه دیتابیس
-DB_FOLDER = os.path.join(BASE_DIR, 'db')
-os.makedirs(DB_FOLDER, exist_ok=True)
-DB_PATH = os.path.join(DB_FOLDER, 'shahid_library.db')
-
-# 📁 پوشه‌های آپلود
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-COVER_FOLDER = os.path.join(UPLOAD_FOLDER, 'covers')
-PDF_FOLDER = os.path.join(UPLOAD_FOLDER, 'pdfs')
-AUDIO_FOLDER = os.path.join(UPLOAD_FOLDER, 'audios')
-VIDEO_FOLDER = os.path.join(UPLOAD_FOLDER, 'videos')
-
-for folder in [COVER_FOLDER, PDF_FOLDER, AUDIO_FOLDER, VIDEO_FOLDER]:
-    os.makedirs(folder, exist_ok=True)
-
-# ═══════════════════════════════════════════════════════════════════
-#  ۲. راه‌اندازی Flask
-# ═══════════════════════════════════════════════════════════════════
-
+# --- اپلیکیشن ---
 app = Flask(__name__)
-
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-me')
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-change-me')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=30)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    'DATABASE_URL', f'sqlite:///{DB_PATH}'
-)
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # ۵۰۰ مگابایت
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['BASE_URL'] = os.getenv('BASE_URL', 'http://localhost:5000')
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URI
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
-ALLOWED_IMAGES = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
-ALLOWED_PDFS = {'pdf'}
-ALLOWED_AUDIOS = {'mp3', 'm4a', 'wav', 'ogg', 'aac'}
-ALLOWED_VIDEOS = {'mp4', 'webm', 'mkv', 'mov'}
-
-# ── افزونه‌ها ──
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
-jwt = JWTManager(app)
-bcrypt = Bcrypt(app)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+db = SQLAlchemy(app)
 
-# ═══════════════════════════════════════════════════════════════════
-#  ۳. مدل‌های دیتابیس
-# ═══════════════════════════════════════════════════════════════════
+# --- پوشه‌ها ---
+for folder in [
+    os.path.join(UPLOAD_FOLDER, 'books'),
+    os.path.join(UPLOAD_FOLDER, 'audio'),
+    os.path.join(UPLOAD_FOLDER, 'video'),
+]:
+    os.makedirs(folder, exist_ok=True)
 
+# --- مدل‌ها ---
 class User(db.Model):
     __tablename__ = 'users'
-
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    dice_bear_seed = db.Column(
-        db.String(120),
-        default=lambda: f'user-{int(datetime.now().timestamp())}'
-    )
-    avatar_style = db.Column(db.String(50), default='adventurer')
-    theme_color = db.Column(db.Integer, default=0xFF1B5E20)
-    is_dark_mode = db.Column(db.Boolean, default=False)
-    role = db.Column(db.String(20), default='user')
-    is_active = db.Column(db.Boolean, default=True)
+    name = db.Column(db.String(100), nullable=False)
+    national_code = db.Column(db.String(10), unique=True, nullable=False)
+    avatar_seed = db.Column(db.String(100))
+    avatar_style = db.Column(db.String(50))
+    bio = db.Column(db.Text)
+    theme_preference = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    favorites = db.relationship('Favorite', backref='user', lazy='dynamic',
-                                 cascade='all, delete-orphan')
-    downloads = db.relationship('Download', backref='user', lazy='dynamic',
-                                 cascade='all, delete-orphan')
-
-    def set_password(self, password):
-        self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
-
-    def check_password(self, password):
-        return bcrypt.check_password_hash(self.password_hash, password)
-
-    def is_admin(self):
-        return self.role == 'admin'
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
-            'email': self.email,
-            'diceBearSeed': self.dice_bear_seed,
-            'avatarStyle': self.avatar_style,
-            'themeColor': self.theme_color,
-            'isDarkMode': self.is_dark_mode,
-            'role': self.role,
-            'favoriteBookIds': [f.book_id for f in self.favorites],
-            'createdAt': self.created_at.isoformat(),
-        }
-
-
-class Category(db.Model):
-    __tablename__ = 'categories'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), unique=True, nullable=False)
-    slug = db.Column(db.String(100), unique=True, index=True)
-    icon = db.Column(db.String(50), default='book')
-    color = db.Column(db.String(20), default='#1B5E20')
-    description = db.Column(db.Text)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    books = db.relationship('Book', backref='category', lazy='dynamic')
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'name': self.name,
-            'slug': self.slug,
-            'icon': self.icon,
-            'color': self.color,
-            'description': self.description,
-            'bookCount': self.books.count(),
+            'national_code': self.national_code,
+            'avatar_seed': self.avatar_seed,
+            'avatar_style': self.avatar_style,
+            'bio': self.bio,
+            'theme_preference': self.theme_preference,
         }
 
 
 class Book(db.Model):
     __tablename__ = 'books'
-
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(255), nullable=False, index=True)
-    author = db.Column(db.String(150), nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    cover_url = db.Column(db.String(500), nullable=False)
-    pdf_url = db.Column(db.String(500), nullable=True)
-    audio_url = db.Column(db.String(500), nullable=True)
-    video_url = db.Column(db.String(500), nullable=True)  # 🆕 پشتیبانی ویدیو
-    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
-
+    title = db.Column(db.String(200), nullable=False)
+    author = db.Column(db.String(200))
+    description = db.Column(db.Text)
+    cover_url = db.Column(db.String(500))
+    file_url = db.Column(db.String(500))
+    file_path = db.Column(db.String(500))
+    type = db.Column(db.String(20), nullable=False)  # pdf, audio, video
+    category = db.Column(db.String(100))
     rating = db.Column(db.Float, default=0.0)
     rating_count = db.Column(db.Integer, default=0)
-    download_count = db.Column(db.Integer, default=0)
-    page_count = db.Column(db.Integer, default=0)
-    duration = db.Column(db.String(20), nullable=True)
-    file_size = db.Column(db.String(20), default='0 MB')
-    language = db.Column(db.String(50), default='فارسی')
-    tags = db.Column(db.Text, default='[]')
-
-    is_featured = db.Column(db.Boolean, default=False)
-    is_published = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    favorites = db.relationship('Favorite', backref='book', lazy='dynamic',
-                                 cascade='all, delete-orphan')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
-        try:
-            tags_list = json.loads(self.tags) if self.tags else []
-        except (json.JSONDecodeError, TypeError):
-            tags_list = []
-
         return {
-            'id': str(self.id),
+            'id': self.id,
             'title': self.title,
             'author': self.author,
             'description': self.description,
-            'coverUrl': self.cover_url,
-            'pdfUrl': self.pdf_url,
-            'audioUrl': self.audio_url,
-            'videoUrl': self.video_url,
-            'category': self.category.name if self.category else 'عمومی',
-            'categoryId': self.category_id,
-            'rating': float(self.rating),
-            'ratingCount': self.rating_count,
-            'downloadCount': self.download_count,
-            'pageCount': self.page_count,
-            'duration': self.duration,
-            'fileSize': self.file_size,
-            'language': self.language,
-            'tags': tags_list,
-            'isFeatured': self.is_featured,
-            'isPublished': self.is_published,
-            'createdAt': self.created_at.isoformat(),
+            'cover_url': self.cover_url,
+            'file_url': self.file_url,
+            'file_path': self.file_path,
+            'type': self.type,
+            'category': self.category,
+            'rating': self.rating,
+            'rating_count': self.rating_count,
         }
 
 
-class Favorite(db.Model):
-    __tablename__ = 'favorites'
+class Rating(db.Model):
+    __tablename__ = 'ratings'
+    id = db.Column(db.Integer, primary_key=True)
+    book_id = db.Column(db.Integer, db.ForeignKey('books.id'), nullable=False)
+    user_name = db.Column(db.String(100), nullable=False)
+    rating = db.Column(db.Float, nullable=False)
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'book_id': self.book_id,
+            'user_name': self.user_name,
+            'rating': self.rating,
+            'comment': self.comment,
+            'created_at': self.created_at.isoformat(),
+        }
+
+class UserActivity(db.Model):
+    __tablename__ = 'user_activities'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     book_id = db.Column(db.Integer, db.ForeignKey('books.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    action = db.Column(db.String(20))  # read, listen, watch, complete
+    minutes_read = db.Column(db.Integer, default=0)
+    current_streak = db.Column(db.Integer, default=1)
+    last_activity = db.Column(db.DateTime, default=datetime.utcnow)
 
-    __table_args__ = (
-        db.UniqueConstraint('user_id', 'book_id', name='unique_user_book'),
-    )
-
-
-class Download(db.Model):
-    __tablename__ = 'downloads'
-
+class ReadingCircle(db.Model):
+    __tablename__ = 'reading_circles'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    book_id = db.Column(db.Integer, db.ForeignKey('books.id'), nullable=False)
-    download_type = db.Column(db.String(20), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    book_id = db.Column(db.Integer, db.ForeignKey('books.id'))
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    members = db.relationship('CircleMember', backref='circle', lazy=True)
 
+class CircleMember(db.Model):
+    __tablename__ = 'circle_members'
+    id = db.Column(db.Integer, primary_key=True)
+    circle_id = db.Column(db.Integer, db.ForeignKey('reading_circles.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    progress = db.Column(db.Float, default=0.0)
 
-# ═══════════════════════════════════════════════════════════════════
-#  ۴. ابزارهای کمکی
-# ═══════════════════════════════════════════════════════════════════
+# --- ساخت دیتابیس ---
+with app.app_context():
+    db.create_all()
 
-def allowed_file(filename, allowed_extensions):
+# --- توابع کمکی ---
+def allowed_file(filename):
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in allowed_extensions
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+@app.route('/api/circles', methods=['GET'])
+def get_circles():
+    circles = ReadingCircle.query.all()
+    result = []
+    for c in circles:
+        data = {
+            'id': c.id, 'name': c.name, 'description': c.description,
+            'book': Book.query.get(c.book_id).to_dict() if c.book_id else None,
+            'member_count': len(c.members),
+            'created_at': c.created_at.isoformat()
+        }
+        result.append(data)
+    return jsonify(result), 200
 
-def save_file(file, folder, allowed_extensions):
-    """ذخیره فایل آپلود شده و برگرداندن URL آن"""
-    if not file or not file.filename:
-        return None
-    if not allowed_file(file.filename, allowed_extensions):
-        raise ValueError('فرمت فایل پشتیبانی نمی‌شود')
-
-    ext = file.filename.rsplit('.', 1)[1].lower()
-    filename = f"{uuid.uuid4().hex}.{ext}"
-    filepath = os.path.join(folder, filename)
-    file.save(filepath)
-
-    rel_path = os.path.relpath(filepath, UPLOAD_FOLDER).replace(os.sep, '/')
-    return f"{app.config['BASE_URL']}/uploads/{rel_path}"
-
-
-def delete_file(url):
-    """حذف فایل با URL"""
-    if not url:
-        return
-    try:
-        rel_path = url.split('/uploads/')[-1]
-        filepath = os.path.join(UPLOAD_FOLDER, rel_path)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-    except (IndexError, OSError):
-        pass
-
-
-def admin_required(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        verify_jwt_in_request()
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        if not user or not user.is_admin():
-            return jsonify({
-                'success': False,
-                'message': 'دسترسی فقط برای مدیران مجاز است',
-            }), 403
-        return fn(*args, **kwargs)
-    return wrapper
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  ۵. مدیریت خطاها
-# ═══════════════════════════════════════════════════════════════════
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'success': False, 'message': 'منبع یافت نشد'}), 404
-
-
-@app.errorhandler(500)
-def server_error(error):
-    return jsonify({'success': False, 'message': 'خطای داخلی سرور'}), 500
-
-
-@app.errorhandler(413)
-def file_too_large(error):
-    return jsonify({
-        'success': False,
-        'message': 'حجم فایل بیش از حد مجاز است (حداکثر ۵۰۰ مگابایت)',
-    }), 413
-
-
-@jwt.unauthorized_loader
-def unauthorized_response(callback):
-    return jsonify({
-        'success': False,
-        'message': 'دسترسی غیرمجاز: توکن ارائه نشده',
-    }), 401
-
-
-@jwt.invalid_token_loader
-def invalid_token_response(callback):
-    return jsonify({'success': False, 'message': 'توکن نامعتبر است'}), 401
-
-
-@jwt.expired_token_loader
-def expired_token_response(jwt_header, jwt_payload):
-    return jsonify({'success': False, 'message': 'توکن منقضی شده است'}), 401
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  ۶. سرو فایل‌ها (با پشتیبانی از Range برای ویدیو/صوت)
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/uploads/<path:filename>')
-def serve_upload(filename):
-    """سرو فایل‌های آپلود شده با پشتیبانی از Range (برای streaming)"""
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    if not os.path.exists(filepath):
-        return jsonify({'success': False, 'message': 'فایل یافت نشد'}), 404
-    return send_file(filepath, conditional=True)
-
-
-@app.route('/uploads/pdf/<path:filename>')
-def serve_pdf(filename):
-    """سرو PDF برای نمایش در مرورگر"""
-    return send_from_directory(PDF_FOLDER, filename)
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  ۷. صفحه اصلی
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/')
-def index():
-    return jsonify({
-        'success': True,
-        'message': '✅ API کتابخانه شهید حاج قاسم سلیمانی فعال است',
-        'version': '2.0.0',
-        'db_path': DB_PATH,
-        'endpoints': {
-            'auth': '/api/auth',
-            'books': '/api/books',
-            'categories': '/api/categories',
-            'users': '/api/users',
-            'uploads': '/uploads',
-        },
-    })
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  ۸. احراز هویت
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/api/auth/register', methods=['POST'])
-def register():
-    data = request.get_json() or {}
-    name = data.get('name', '').strip()
-    email = data.get('email', '').strip().lower()
-    password = data.get('password', '')
-
-    if not name or not email or not password:
-        return jsonify({'success': False, 'message': 'همه فیلدها الزامی هستند'}), 400
-
-    if len(password) < 6:
-        return jsonify({
-            'success': False,
-            'message': 'رمز عبور باید حداقل ۶ کاراکتر باشد',
-        }), 400
-
-    if User.query.filter_by(email=email).first():
-        return jsonify({
-            'success': False,
-            'message': 'این ایمیل قبلاً ثبت شده است',
-        }), 400
-
-    user = User(name=name, email=email)
-    user.set_password(password)
-    db.session.add(user)
+@app.route('/api/circles', methods=['POST'])
+def create_circle():
+    data = request.get_json()
+    circle = ReadingCircle(
+        name=data['name'], description=data.get('description', ''),
+        book_id=data.get('book_id'), created_by=data['user_id']
+    )
+    db.session.add(circle)
     db.session.commit()
+    # سازنده به عنوان عضو اضافه شود
+    member = CircleMember(circle_id=circle.id, user_id=data['user_id'])
+    db.session.add(member)
+    db.session.commit()
+    return jsonify({'message': 'حلقه مطالعه ایجاد شد', 'circle_id': circle.id}), 201
 
-    token = create_access_token(identity=user.id)
-    return jsonify({
-        'success': True,
-        'message': 'ثبت‌نام با موفقیت انجام شد',
-        'token': token,
-        'user': user.to_dict(),
-    }), 201
+@app.route('/api/circles/<int:circle_id>/join', methods=['POST'])
+def join_circle(circle_id):
+    data = request.get_json()
+    existing = CircleMember.query.filter_by(
+        circle_id=circle_id, user_id=data['user_id']
+    ).first()
+    if existing:
+        return jsonify({'error': 'قبلاً عضو شده‌اید'}), 400
+    member = CircleMember(circle_id=circle_id, user_id=data['user_id'])
+    db.session.add(member)
+    db.session.commit()
+    return jsonify({'message': 'عضو شدید'}), 201
 
+@app.route('/api/leaderboard', methods=['GET'])
+def get_leaderboard():
+    period = request.args.get('period', 'weekly')
+    if period == 'weekly':
+        start = datetime.utcnow() - timedelta(days=7)
+    elif period == 'monthly':
+        start = datetime.utcnow() - timedelta(days=30)
+    else:
+        start = datetime(2000, 1, 1)
 
-@app.route('/api/auth/login', methods=['POST'])
+    # بر اساس مجموع دقایق مطالعه
+    results = db.session.query(
+        User.id, User.name, User.avatar_seed,
+        db.func.sum(UserActivity.minutes_read).label('total_minutes'),
+        db.func.count(UserActivity.id).label('books_count')
+    ).join(UserActivity, User.id == UserActivity.user_id)\
+     .filter(UserActivity.last_activity >= start)\
+     .group_by(User.id)\
+     .order_by(db.desc('total_minutes'))\
+     .limit(20).all()
+
+    leaderboard = [{
+        'rank': i + 1, 'user_id': r.id, 'name': r.name,
+        'avatar_seed': r.avatar_seed,
+        'total_minutes': r.total_minutes or 0,
+        'books_count': r.books_count
+    } for i, r in enumerate(results)]
+
+    return jsonify(leaderboard), 200
+
+@app.route('/api/ai/recommendations/<int:user_id>', methods=['GET'])
+def get_recommendations(user_id):
+    user = User.query.get_or_404(user_id)
+    limit = request.args.get('limit', 5, type=int)
+    books = ai_engine.get_book_recommendations(user, limit)
+    return jsonify([b.to_dict() for b in books]), 200
+
+@app.route('/api/ai/message/<int:user_id>', methods=['GET'])
+def get_motivational_message(user_id):
+    user = User.query.get_or_404(user_id)
+    activity = UserActivity.query.filter_by(user_id=user_id).order_by(
+        UserActivity.last_activity.desc()
+    ).first()
+    message = ai_engine.get_motivational_message(user, activity)
+    return jsonify({'message': message}), 200
+
+@app.route('/api/ai/stats/<int:user_id>', methods=['GET'])
+def get_user_stats(user_id):
+    user = User.query.get_or_404(user_id)
+    stats = ai_engine.get_user_stats(user)
+    return jsonify(stats), 200
+
+@app.route('/api/ai/activity', methods=['POST'])
+def record_activity():
+    """ثبت فعالیت کاربر برای محاسبه استریک و آمار"""
+    data = request.get_json()
+    user_id = data.get('user_id')
+    book_id = data.get('book_id')
+    action = data.get('action')  # 'read', 'listen', 'watch', 'complete'
+    minutes = data.get('minutes', 0)
+
+    today = datetime.utcnow().date()
+    activity = UserActivity.query.filter_by(
+        user_id=user_id, book_id=book_id
+    ).order_by(UserActivity.last_activity.desc()).first()
+
+    if activity and activity.last_activity.date() == today:
+        # فعالیت امروز قبلاً ثبت شده
+        activity.minutes_read = (activity.minutes_read or 0) + minutes
+        activity.last_activity = datetime.utcnow()
+    else:
+        # بررسی استریک
+        streak = 1
+        if activity and activity.last_activity.date() == today - timedelta(days=1):
+            streak = activity.current_streak + 1
+
+        activity = UserActivity(
+            user_id=user_id, book_id=book_id, action=action,
+            minutes_read=minutes, current_streak=streak,
+            last_activity=datetime.utcnow()
+        )
+        db.session.add(activity)
+
+    db.session.commit()
+    return jsonify({'message': 'فعالیت ثبت شد', 'streak': activity.current_streak}), 201
+
+# --- API: ورود / ثبت‌نام ---
+@app.route('/api/login', methods=['POST'])
 def login():
-    data = request.get_json() or {}
-    email = data.get('email', '').strip().lower()
-    password = data.get('password', '')
+    data = request.get_json()
+    name = data.get('name')
+    national_code = data.get('national_code')
 
-    if not email or not password:
-        return jsonify({
-            'success': False,
-            'message': 'ایمیل و رمز عبور الزامی هستند',
-        }), 400
+    if not name or not national_code:
+        return jsonify({'error': 'نام و کد ملی الزامی است'}), 400
 
-    user = User.query.filter_by(email=email).first()
-    if not user or not user.check_password(password):
-        return jsonify({
-            'success': False,
-            'message': 'ایمیل یا رمز عبور اشتباه است',
-        }), 401
-
-    if not user.is_active:
-        return jsonify({
-            'success': False,
-            'message': 'حساب کاربری غیرفعال است',
-        }), 403
-
-    token = create_access_token(identity=user.id)
-    return jsonify({
-        'success': True,
-        'message': 'ورود موفقیت‌آمیز بود',
-        'token': token,
-        'user': user.to_dict(),
-    })
+    user = User.query.filter_by(national_code=national_code).first()
+    if user:
+        return jsonify({'message': 'ورود موفق', 'user': user.to_dict()}), 200
+    else:
+        user = User(
+            name=name,
+            national_code=national_code,
+            avatar_seed=national_code,
+            avatar_style='adventurer',
+        )
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({'message': 'ثبت‌نام موفق', 'user': user.to_dict()}), 201
 
 
-@app.route('/api/auth/me', methods=['GET'])
-@jwt_required()
-def get_me():
-    user = User.query.get(get_jwt_identity())
-    if not user:
-        return jsonify({'success': False, 'message': 'کاربر یافت نشد'}), 404
-    return jsonify({'success': True, 'user': user.to_dict()})
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  ۹. کتاب‌ها
-# ═══════════════════════════════════════════════════════════════════
-
+# --- API: دریافت لیست کتاب‌ها ---
 @app.route('/api/books', methods=['GET'])
 def get_books():
-    page = request.args.get('page', 1, type=int)
-    limit = request.args.get('limit', 20, type=int)
-    category_id = request.args.get('category', type=int)
-    featured = request.args.get('isFeatured', type=lambda x: x.lower() == 'true')
-
-    query = Book.query.filter_by(is_published=True)
-    if category_id:
-        query = query.filter_by(category_id=category_id)
-    if featured is not None:
-        query = query.filter_by(is_featured=featured)
-
-    pagination = query.order_by(Book.created_at.desc()).paginate(
-        page=page, per_page=limit, error_out=False
-    )
-
-    return jsonify({
-        'success': True,
-        'count': len(pagination.items),
-        'page': page,
-        'pages': pagination.pages,
-        'total': pagination.total,
-        'books': [b.to_dict() for b in pagination.items],
-    })
+    book_type = request.args.get('type')
+    category = request.args.get('category')
+    query = Book.query
+    if book_type:
+        query = query.filter_by(type=book_type)
+    if category:
+        query = query.filter_by(category=category)
+    books = query.order_by(Book.created_at.desc()).all()
+    return jsonify([b.to_dict() for b in books]), 200
 
 
+# --- API: دریافت جزئیات یک کتاب ---
 @app.route('/api/books/<int:book_id>', methods=['GET'])
 def get_book(book_id):
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({'success': False, 'message': 'کتاب یافت نشد'}), 404
-    return jsonify({'success': True, 'book': book.to_dict()})
+    book = Book.query.get_or_404(book_id)
+    return jsonify(book.to_dict()), 200
 
 
-@app.route('/api/books/search', methods=['GET'])
-def search_books():
-    q = request.args.get('q', '').strip()
-    if not q:
-        return jsonify({'success': True, 'count': 0, 'books': []})
+# --- API: آپلود فایل کتاب/صوت/ویدیو ---
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'فایلی ارسال نشده است'}), 400
 
-    pattern = f'%{q}%'
-    books = Book.query.filter(
-        Book.is_published == True,
-        or_(
-            Book.title.ilike(pattern),
-            Book.author.ilike(pattern),
-            Book.description.ilike(pattern),
-        )
-    ).limit(30).all()
+    file = request.files['file']
+    book_type = request.form.get('type', 'pdf')
+    title = request.form.get('title')
+    author = request.form.get('author', '')
+    description = request.form.get('description', '')
+    category = request.form.get('category', '')
 
-    return jsonify({
-        'success': True,
-        'count': len(books),
-        'books': [b.to_dict() for b in books],
-    })
+    if file.filename == '':
+        return jsonify({'error': 'نام فایل خالی است'}), 400
 
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'فرمت فایل مجاز نیست'}), 400
 
-@app.route('/api/books/audio', methods=['GET'])
-def get_audio_books():
-    books = Book.query.filter(
-        Book.audio_url.isnot(None), Book.is_published == True,
-    ).order_by(Book.created_at.desc()).all()
+    # ذخیره فایل با نام امن
+    original_name = secure_filename(file.filename)
+    unique_name = f"{uuid.uuid4().hex}_{original_name}"
+    subfolder = 'books' if book_type == 'pdf' else 'audio' if book_type == 'audio' else 'video'
+    file_path = os.path.join(UPLOAD_FOLDER, subfolder, unique_name)
+    file.save(file_path)
 
-    return jsonify({
-        'success': True,
-        'count': len(books),
-        'books': [b.to_dict() for b in books],
-    })
+    # ساخت URL
+    file_url = f"/api/download/{subfolder}/{unique_name}"
 
-
-@app.route('/api/books/video', methods=['GET'])
-def get_video_books():
-    books = Book.query.filter(
-        Book.video_url.isnot(None), Book.is_published == True,
-    ).order_by(Book.created_at.desc()).all()
-
-    return jsonify({
-        'success': True,
-        'count': len(books),
-        'books': [b.to_dict() for b in books],
-    })
-
-
-@app.route('/api/books', methods=['POST'])
-@admin_required
-def create_book():
-    data = request.form.to_dict() if request.form else (request.get_json() or {})
-
-    required = ['title', 'author', 'description', 'categoryId']
-    for field in required:
-        if not data.get(field):
-            return jsonify({
-                'success': False,
-                'message': f'فیلد {field} الزامی است',
-            }), 400
-
-    if not Category.query.get(int(data['categoryId'])):
-        return jsonify({
-            'success': False,
-            'message': 'دسته‌بندی یافت نشد',
-        }), 404
-
-    try:
-        cover_url = None
-        if 'cover' in request.files:
-            cover_url = save_file(request.files['cover'], COVER_FOLDER, ALLOWED_IMAGES)
-
-        pdf_url = None
-        if 'pdf' in request.files:
-            pdf_url = save_file(request.files['pdf'], PDF_FOLDER, ALLOWED_PDFS)
-
-        audio_url = None
-        if 'audio' in request.files:
-            audio_url = save_file(request.files['audio'], AUDIO_FOLDER, ALLOWED_AUDIOS)
-
-        video_url = None
-        if 'video' in request.files:
-            video_url = save_file(request.files['video'], VIDEO_FOLDER, ALLOWED_VIDEOS)
-    except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
-
-    if not cover_url and not data.get('coverUrl'):
-        return jsonify({
-            'success': False,
-            'message': 'تصویر جلد الزامی است',
-        }), 400
-
-    is_featured_val = data.get('isFeatured', False)
-    if isinstance(is_featured_val, str):
-        is_featured_val = is_featured_val.lower() == 'true'
-
+    # ذخیره در دیتابیس
     book = Book(
-        title=data['title'],
-        author=data['author'],
-        description=data['description'],
-        cover_url=cover_url or data.get('coverUrl'),
-        pdf_url=pdf_url or data.get('pdfUrl'),
-        audio_url=audio_url or data.get('audioUrl'),
-        video_url=video_url or data.get('videoUrl'),
-        category_id=int(data['categoryId']),
-        page_count=int(data.get('pageCount', 0)),
-        duration=data.get('duration'),
-        language=data.get('language', 'فارسی'),
-        tags=data.get('tags', '[]'),
-        is_featured=bool(is_featured_val),
+        title=title,
+        author=author,
+        description=description,
+        file_url=file_url,
+        file_path=file_path,
+        type=book_type,
+        category=category,
     )
-
     db.session.add(book)
     db.session.commit()
 
-    return jsonify({
-        'success': True,
-        'message': 'کتاب با موفقیت اضافه شد',
-        'book': book.to_dict(),
-    }), 201
+    return jsonify({'message': 'فایل با موفقیت آپلود شد', 'book': book.to_dict()}), 201
 
 
-@app.route('/api/books/<int:book_id>', methods=['PUT'])
-@admin_required
-def update_book(book_id):
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({'success': False, 'message': 'کتاب یافت نشد'}), 404
-
-    data = request.form.to_dict() if request.form else (request.get_json() or {})
-
-    if 'title' in data:
-        book.title = data['title']
-    if 'author' in data:
-        book.author = data['author']
-    if 'description' in data:
-        book.description = data['description']
-    if 'categoryId' in data:
-        book.category_id = int(data['categoryId'])
-    if 'pageCount' in data:
-        book.page_count = int(data['pageCount'])
-    if 'duration' in data:
-        book.duration = data['duration']
-
-    try:
-        if 'cover' in request.files:
-            delete_file(book.cover_url)
-            book.cover_url = save_file(request.files['cover'], COVER_FOLDER, ALLOWED_IMAGES)
-        if 'pdf' in request.files:
-            delete_file(book.pdf_url)
-            book.pdf_url = save_file(request.files['pdf'], PDF_FOLDER, ALLOWED_PDFS)
-        if 'audio' in request.files:
-            delete_file(book.audio_url)
-            book.audio_url = save_file(request.files['audio'], AUDIO_FOLDER, ALLOWED_AUDIOS)
-        if 'video' in request.files:
-            delete_file(book.video_url)
-            book.video_url = save_file(request.files['video'], VIDEO_FOLDER, ALLOWED_VIDEOS)
-    except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
-
-    db.session.commit()
-    return jsonify({
-        'success': True,
-        'message': 'کتاب با موفقیت ویرایش شد',
-        'book': book.to_dict(),
-    })
+# --- API: دانلود فایل ---
+@app.route('/api/download/<folder>/<filename>', methods=['GET'])
+def download_file(folder, filename):
+    file_path = os.path.join(UPLOAD_FOLDER, folder, filename)
+    if not os.path.exists(file_path):
+        abort(404)
+    return send_file(file_path, as_attachment=True)
 
 
-@app.route('/api/books/<int:book_id>', methods=['DELETE'])
-@admin_required
-def delete_book(book_id):
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({'success': False, 'message': 'کتاب یافت نشد'}), 404
+# --- API: ثبت امتیاز ---
+@app.route('/api/ratings', methods=['POST'])
+def add_rating():
+    data = request.get_json()
+    book_id = data.get('book_id')
+    user_name = data.get('user_name')
+    rating_value = data.get('rating')
+    comment = data.get('comment', '')
 
-    delete_file(book.cover_url)
-    delete_file(book.pdf_url)
-    delete_file(book.audio_url)
-    delete_file(book.video_url)
+    if not all([book_id, user_name, rating_value]):
+        return jsonify({'error': 'اطلاعات ناقص است'}), 400
 
-    db.session.delete(book)
-    db.session.commit()
-    return jsonify({'success': True, 'message': 'کتاب حذف شد'})
-
-
-@app.route('/api/books/<int:book_id>/download', methods=['POST'])
-@jwt_required()
-def track_download(book_id):
-    user_id = get_jwt_identity()
-    data = request.get_json() or {}
-    download_type = data.get('type', 'pdf')
-
-    book = Book.query.get(book_id)
-    if not book:
-        return jsonify({'success': False, 'message': 'کتاب یافت نشد'}), 404
-
-    download = Download(user_id=user_id, book_id=book_id, download_type=download_type)
-    book.download_count += 1
-    db.session.add(download)
-    db.session.commit()
-
-    return jsonify({'success': True, 'message': 'دانلود ثبت شد'})
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  ۱۰. دسته‌بندی‌ها
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/api/categories', methods=['GET'])
-def get_categories():
-    categories = Category.query.filter_by(is_active=True).all()
-    return jsonify({
-        'success': True,
-        'count': len(categories),
-        'categories': [c.to_dict() for c in categories],
-    })
-
-
-@app.route('/api/categories/<int:category_id>', methods=['GET'])
-def get_category(category_id):
-    category = Category.query.get(category_id)
-    if not category:
-        return jsonify({'success': False, 'message': 'دسته‌بندی یافت نشد'}), 404
-    return jsonify({'success': True, 'category': category.to_dict()})
-
-
-@app.route('/api/categories', methods=['POST'])
-@admin_required
-def create_category():
-    data = request.get_json() or {}
-    if not data.get('name'):
-        return jsonify({'success': False, 'message': 'نام الزامی است'}), 400
-
-    if Category.query.filter_by(name=data['name']).first():
-        return jsonify({
-            'success': False,
-            'message': 'این دسته‌بندی قبلاً وجود دارد',
-        }), 400
-
-    category = Category(
-        name=data['name'],
-        slug=data['name'].lower().replace(' ', '-'),
-        icon=data.get('icon', 'book'),
-        color=data.get('color', '#1B5E20'),
-        description=data.get('description'),
+    rating = Rating(
+        book_id=book_id,
+        user_name=user_name,
+        rating=rating_value,
+        comment=comment,
     )
-    db.session.add(category)
+    db.session.add(rating)
     db.session.commit()
 
-    return jsonify({
-        'success': True,
-        'message': 'دسته‌بندی ایجاد شد',
-        'category': category.to_dict(),
-    }), 201
-
-
-@app.route('/api/categories/<int:category_id>', methods=['PUT'])
-@admin_required
-def update_category(category_id):
-    category = Category.query.get(category_id)
-    if not category:
-        return jsonify({'success': False, 'message': 'دسته‌بندی یافت نشد'}), 404
-
-    data = request.get_json() or {}
-    if 'name' in data:
-        category.name = data['name']
-        category.slug = data['name'].lower().replace(' ', '-')
-    if 'icon' in data:
-        category.icon = data['icon']
-    if 'color' in data:
-        category.color = data['color']
-    if 'description' in data:
-        category.description = data['description']
-
-    db.session.commit()
-    return jsonify({'success': True, 'category': category.to_dict()})
-
-
-@app.route('/api/categories/<int:category_id>', methods=['DELETE'])
-@admin_required
-def delete_category(category_id):
-    category = Category.query.get(category_id)
-    if not category:
-        return jsonify({'success': False, 'message': 'دسته‌بندی یافت نشد'}), 404
-
-    db.session.delete(category)
-    db.session.commit()
-    return jsonify({'success': True, 'message': 'دسته‌بندی حذف شد'})
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  ۱۱. کاربران
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/api/users/profile', methods=['GET'])
-@jwt_required()
-def get_profile():
-    user = User.query.get(get_jwt_identity())
-    if not user:
-        return jsonify({'success': False, 'message': 'کاربر یافت نشد'}), 404
-    return jsonify({'success': True, 'user': user.to_dict()})
-
-
-@app.route('/api/users/profile', methods=['PUT'])
-@jwt_required()
-def update_profile():
-    user = User.query.get(get_jwt_identity())
-    if not user:
-        return jsonify({'success': False, 'message': 'کاربر یافت نشد'}), 404
-
-    data = request.get_json() or {}
-    if 'name' in data:
-        user.name = data['name']
-    if 'diceBearSeed' in data:
-        user.dice_bear_seed = data['diceBearSeed']
-    if 'avatarStyle' in data:
-        user.avatar_style = data['avatarStyle']
-    if 'themeColor' in data:
-        user.theme_color = data['themeColor']
-    if 'isDarkMode' in data:
-        user.is_dark_mode = data['isDarkMode']
-
-    db.session.commit()
-    return jsonify({
-        'success': True,
-        'message': 'پروفایل به‌روزرسانی شد',
-        'user': user.to_dict(),
-    })
-
-
-@app.route('/api/users/favorites', methods=['GET'])
-@jwt_required()
-def get_favorites():
-    user_id = get_jwt_identity()
-    favorites = Favorite.query.filter_by(user_id=user_id).all()
-    books = [Book.query.get(f.book_id) for f in favorites]
-    books = [b for b in books if b is not None]
-
-    return jsonify({
-        'success': True,
-        'count': len(books),
-        'books': [b.to_dict() for b in books],
-    })
-
-
-@app.route('/api/users/favorites/<int:book_id>', methods=['POST'])
-@jwt_required()
-def toggle_favorite(book_id):
-    user_id = get_jwt_identity()
+    # به‌روزرسانی میانگین امتیاز کتاب
     book = Book.query.get(book_id)
-    if not book:
-        return jsonify({'success': False, 'message': 'کتاب یافت نشد'}), 404
-
-    existing = Favorite.query.filter_by(user_id=user_id, book_id=book_id).first()
-    if existing:
-        db.session.delete(existing)
+    if book:
+        ratings = Rating.query.filter_by(book_id=book_id).all()
+        book.rating = sum(r.rating for r in ratings) / len(ratings)
+        book.rating_count = len(ratings)
         db.session.commit()
-        return jsonify({
-            'success': True,
-            'isFavorite': False,
-            'message': 'از علاقه‌مندی‌ها حذف شد',
-        })
-    else:
-        favorite = Favorite(user_id=user_id, book_id=book_id)
-        db.session.add(favorite)
-        db.session.commit()
-        return jsonify({
-            'success': True,
-            'isFavorite': True,
-            'message': 'به علاقه‌مندی‌ها اضافه شد',
-        })
+
+    return jsonify({'message': 'امتیاز ثبت شد', 'rating': rating.to_dict()}), 201
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  ۱۲. اجرا
-# ═══════════════════════════════════════════════════════════════════
+# --- API: دریافت امتیازات یک کتاب ---
+@app.route('/api/ratings/<int:book_id>', methods=['GET'])
+def get_ratings(book_id):
+    ratings = Rating.query.filter_by(book_id=book_id).order_by(Rating.created_at.desc()).all()
+    return jsonify([r.to_dict() for r in ratings]), 200
 
+
+# --- اجرا ---
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        print('═' * 60)
-        print('✅ دیتابیس ایجاد/بررسی شد')
-        print(f'🗄️  مسیر دیتابیس: {DB_PATH}')
-        print(f'📁 پوشه آپلود: {UPLOAD_FOLDER}')
-        print('🚀 سرور روی پورت 5000 در حال اجراست')
-        print('📍 آدرس: http://localhost:5000')
-        print('═' * 60)
-        print('💡 برای پر کردن دیتابیس با داده‌های نمونه، اجرا کن:')
-        print('   python seed.py')
-        print('═' * 60)
-
     app.run(host='0.0.0.0', port=5000, debug=True)
