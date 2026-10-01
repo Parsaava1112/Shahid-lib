@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dice_bear/flutter_dice_bear.dart';
+// ✅ ایمپورت‌های صحیح
+import 'package:dicebear_core/dicebear_core.dart';
+import 'package:dicebear_styles/adventurer.dart';
+import 'package:dicebear_styles/fun_emoji.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class AvatarWidget extends StatelessWidget {
   final String seed;

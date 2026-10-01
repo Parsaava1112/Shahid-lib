@@ -23,7 +23,8 @@ dependencies:
   animations: ^2.0.11  # برای Material Motion
 
   # Avatar
-  flutter_dice_bear: ^1.0.1
+  dicebear_core: ^10.7.0
+  dicebear_styles: ^10.0.0
   flutter_svg: ^2.0.9
 
   # PDF Viewer
