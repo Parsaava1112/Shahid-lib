@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/rating_model.dart';
+import 'package:flutter/foundation.dart';
 
 class DBHelper {
   static Database? _database;
@@ -623,10 +624,4 @@ class DBHelper {
       _database = null;
     }
   }
-}
-
-// برای استفاده از debugPrint
-void debugPrint(String message) {
-  // ignore: avoid_print
-  print('[DBHelper] $message');
 }
