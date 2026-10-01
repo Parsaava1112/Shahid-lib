@@ -3,21 +3,88 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      # ==================== ۱. دریافت کد ====================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ==================== ۲. راه‌اندازی Java ====================
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
         with:
-          flutter-version: '3.27.0'   # 👈 نسخهٔ جدید
+          distribution: 'zulu'
+          java-version: '17'
+
+      # ==================== ۳. راه‌اندازی Flutter ====================
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.0'
           channel: 'stable'
-      - run: flutter pub get
-      - run: flutter create --project-name library .
-      - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
+          cache: true
+
+      # ==================== ۴. بررسی نسخه‌ها ====================
+      - name: Verify Flutter and Dart versions
+        run: |
+          flutter --version
+          dart --version
+
+      # ==================== ۵. نصب وابستگی‌ها ====================
+      - name: Install dependencies
+        run: flutter pub get
+
+      # ==================== ۶. بررسی کد (اختیاری) ====================
+      - name: Analyze code
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        continue-on-error: true
+
+      # ==================== ۷. اجرای تست‌ها (اختیاری) ====================
+      - name: Run tests
+        run: flutter test
+        continue-on-error: true
+
+      # ==================== ۸. ساخت APK ====================
+      - name: Build APK (release)
+        run: flutter build apk --release --split-per-abi
+
+      # ==================== ۹. ساخت APK کامل (بدون split) - اختیاری ====================
+      - name: Build universal APK
+        run: flutter build apk --release
+        continue-on-error: true
+
+      # ==================== ۱۰. آپلود APKها ====================
+      - name: Upload APK artifacts (split)
+        uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: app-release-split
+          path: build/app/outputs/flutter-apk/app-*-release.apk
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload universal APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-universal
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ==================== ۱۱. آپلود گزارش build در صورت خطا ====================
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/
+            android/.gradle/
+          retention-days: 7
