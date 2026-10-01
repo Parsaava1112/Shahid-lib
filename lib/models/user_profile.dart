@@ -1,5 +1,7 @@
 // lib/models/user_profile.dart
 
+import 'dart:convert';
+
 class UserProfile {
   final String id;
   final String name;
@@ -19,30 +21,37 @@ class UserProfile {
     this.favoriteBookIds = const [],
   });
 
-  factory UserProfile.fromJson(Map<String, dynamic> json) {
+  factory UserProfile.fromMap(Map<String, dynamic> map) {
     return UserProfile(
-      id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      diceBearSeed: json['diceBearSeed'] ?? '',
-      avatarStyle: json['avatarStyle'] ?? 'adventurer',
-      themeColor: json['themeColor'] ?? 0xFF1B5E20,
-      isDarkMode: json['isDarkMode'] ?? false,
-      favoriteBookIds: (json['favoriteBookIds'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      id: map['id'] as String,
+      name: map['name'] as String? ?? '',
+      diceBearSeed: map['dice_bear_seed'] as String? ?? '',
+      avatarStyle: map['avatar_style'] as String? ?? 'adventurer',
+      themeColor: map['theme_color'] as int? ?? 0xFF1B5E20,
+      isDarkMode: (map['is_dark_mode'] as int? ?? 0) == 1,
+      favoriteBookIds: _parseFavoriteIds(map['favorite_book_ids']),
     );
   }
 
-  Map<String, dynamic> toJson() {
+  static List<String> _parseFavoriteIds(dynamic value) {
+    if (value == null) return [];
+    try {
+      final list = jsonDecode(value as String);
+      return (list as List).map((e) => e.toString()).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
-      'diceBearSeed': diceBearSeed,
-      'avatarStyle': avatarStyle,
-      'themeColor': themeColor,
-      'isDarkMode': isDarkMode,
-      'favoriteBookIds': favoriteBookIds,
+      'dice_bear_seed': diceBearSeed,
+      'avatar_style': avatarStyle,
+      'theme_color': themeColor,
+      'is_dark_mode': isDarkMode ? 1 : 0,
+      'favorite_book_ids': jsonEncode(favoriteBookIds),
     };
   }
 

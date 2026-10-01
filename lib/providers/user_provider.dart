@@ -3,25 +3,31 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_profile.dart';
 import '../services/api_service.dart';
-import '../services/local_storage.dart';
+import '../repositories/profile_repository.dart';
 
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
+final profileRepositoryProvider =
+    Provider<ProfileRepository>((ref) => ProfileRepository());
 
 final userProfileProvider =
     StateNotifierProvider<UserProfileNotifier, UserProfile?>((ref) {
-  return UserProfileNotifier(ref.read(apiServiceProvider));
+  return UserProfileNotifier(
+    ref.read(apiServiceProvider),
+    ref.read(profileRepositoryProvider),
+  );
 });
 
 class UserProfileNotifier extends StateNotifier<UserProfile?> {
   final ApiService _api;
+  final ProfileRepository _repository;
 
-  UserProfileNotifier(this._api) : super(null) {
+  UserProfileNotifier(this._api, this._repository) : super(null) {
     _init();
   }
 
   Future<void> _init() async {
-    // ابتدا از ReaxDB بخوان
-    final local = await LocalStorageService.getProfileAsync();
+    // ابتدا از دیتابیس محلی بخوان
+    final local = await _repository.getProfile();
     if (local != null) {
       state = local;
     } else {
@@ -35,18 +41,17 @@ class UserProfileNotifier extends StateNotifier<UserProfile?> {
     final defaultProfile = UserProfile(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: 'کاربر مهمان',
-      diceBearSeed:
-          'shahid-soleimani-${DateTime.now().millisecondsSinceEpoch}',
+      diceBearSeed: 'shahid-soleimani-${DateTime.now().millisecondsSinceEpoch}',
     );
     state = defaultProfile;
-    LocalStorageService.saveProfile(defaultProfile);
+    _repository.saveProfile(defaultProfile);
   }
 
   Future<void> _syncFromServer() async {
     try {
       final remote = await _api.fetchProfile();
       state = remote;
-      await LocalStorageService.saveProfile(remote);
+      await _repository.saveProfile(remote);
     } catch (_) {
       // آفلاین: از داده محلی استفاده کن
     }
@@ -56,7 +61,7 @@ class UserProfileNotifier extends StateNotifier<UserProfile?> {
     if (state == null) return;
     final updated = state!.copyWith(name: name);
     state = updated;
-    await LocalStorageService.saveProfile(updated);
+    await _repository.saveProfile(updated);
     try {
       await _api.updateProfile(name: name);
     } catch (_) {}
@@ -66,7 +71,7 @@ class UserProfileNotifier extends StateNotifier<UserProfile?> {
     if (state == null) return;
     final updated = state!.copyWith(diceBearSeed: seed, avatarStyle: style);
     state = updated;
-    await LocalStorageService.saveProfile(updated);
+    await _repository.saveProfile(updated);
     try {
       await _api.updateProfile(diceBearSeed: seed, avatarStyle: style);
     } catch (_) {}
@@ -76,7 +81,7 @@ class UserProfileNotifier extends StateNotifier<UserProfile?> {
     if (state == null) return;
     final updated = state!.copyWith(isDarkMode: !state!.isDarkMode);
     state = updated;
-    await LocalStorageService.saveProfile(updated);
+    await _repository.saveProfile(updated);
     try {
       await _api.updateProfile(isDarkMode: updated.isDarkMode);
     } catch (_) {}
@@ -94,7 +99,7 @@ class UserProfileNotifier extends StateNotifier<UserProfile?> {
       }
       final updated = state!.copyWith(favoriteBookIds: favorites);
       state = updated;
-      await LocalStorageService.saveProfile(updated);
+      await _repository.saveProfile(updated);
     } catch (_) {}
   }
 }

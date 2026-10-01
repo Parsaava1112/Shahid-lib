@@ -4,16 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'services/local_storage.dart';
 import 'screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // راه‌اندازی ReaxDB (جایگزین Hive)
-  await LocalStorageService.init();
-
-  // راه‌اندازی پخش صوتی در پس‌زمینه
+  // دیگر نیازی به init دیتابیس نیست، در اولین استفاده خودکار ساخته می‌شود.
+  // JustAudioBackground.init() را نگه دارید.
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.shahidsoleimani.library.channel.audio',
     androidNotificationChannelName: 'پخش کتاب صوتی',

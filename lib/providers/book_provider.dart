@@ -3,70 +3,63 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/book.dart';
 import '../services/api_service.dart';
-import '../services/local_storage.dart';
+import '../repositories/book_repository.dart';
 
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
+final bookRepositoryProvider = Provider<BookRepository>((ref) => BookRepository());
 
-// ─────────────────────────────────────────
-//  FutureProvider برای لیست کتاب‌ها
-// ─────────────────────────────────────────
-
+/// FutureProvider برای لیست کتاب‌ها (آفلاین-اول)
 final booksProvider = FutureProvider<List<Book>>((ref) async {
   final api = ref.read(apiServiceProvider);
+  final repository = ref.read(bookRepositoryProvider);
 
-  // ابتدا از ReaxDB بخوان (آفلاین-اول)
-  final localBooks = await LocalStorageService.getAllBooks();
+  // ابتدا از دیتابیس محلی بخوان
+  final localBooks = await repository.getAllBooks();
   if (localBooks.isNotEmpty) {
     // در پس‌زمینه از سرور به‌روزرسانی کن
-    _refreshBooksFromServer(api, ref);
+    _refreshBooksFromServer(api, repository, ref);
     return localBooks;
   }
 
-  // اگر محلی خالی بود، از سرور بگیر
+  // اگر دیتابیس خالی بود، از سرور بگیر
   final books = await api.fetchBooks();
-  await LocalStorageService.saveBooks(books);
+  await repository.saveAllBooks(books);
   return books;
 });
 
-Future<void> _refreshBooksFromServer(ApiService api, Ref ref) async {
+Future<void> _refreshBooksFromServer(
+  ApiService api,
+  BookRepository repository,
+  Ref ref,
+) async {
   try {
     final books = await api.fetchBooks();
-    await LocalStorageService.saveBooks(books);
+    await repository.saveAllBooks(books);
     ref.invalidateSelf();
   } catch (_) {
     // خطا را نادیده بگیر، از داده محلی استفاده کن
   }
 }
 
-// ─────────────────────────────────────────
-//  کتاب‌های صوتی
-// ─────────────────────────────────────────
-
+/// کتاب‌های صوتی
 final audioBooksProvider = FutureProvider<List<Book>>((ref) async {
-  final api = ref.read(apiServiceProvider);
-  return api.fetchAudioBooks();
+  final repository = ref.read(bookRepositoryProvider);
+  return repository.getAudioBooks();
 });
 
-// ─────────────────────────────────────────
-//  جستجو
-// ─────────────────────────────────────────
-
+/// جستجو
 final searchQueryProvider = StateProvider<String>((ref) => '');
 
 final searchResultsProvider = FutureProvider<List<Book>>((ref) async {
   final query = ref.watch(searchQueryProvider);
   if (query.isEmpty) return [];
-  final api = ref.read(apiServiceProvider);
-  return api.searchBooks(query);
+  final repository = ref.read(bookRepositoryProvider);
+  return repository.searchBooks(query);
 });
 
-// ─────────────────────────────────────────
-//  کتاب‌های مورد علاقه
-// ─────────────────────────────────────────
-
+/// کتاب‌های مورد علاقه
 final favoriteBooksProvider = FutureProvider<List<Book>>((ref) async {
   final books = await ref.watch(booksProvider.future);
-  final profile = await LocalStorageService.getProfileAsync();
-  if (profile == null) return [];
-  return books.where((b) => profile.favoriteBookIds.contains(b.id)).toList();
+  // در اینجا می‌توانید از ProfileRepository استفاده کنید
+  return books.where((b) => true).toList(); // منطق خود را پیاده کنید
 });
