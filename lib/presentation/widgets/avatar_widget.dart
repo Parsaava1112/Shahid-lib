@@ -1,9 +1,4 @@
 import 'package:flutter/material.dart';
-// ✅ ایمپورت‌های صحیح
-import 'package:dicebear_core/dicebear_core.dart';
-import 'package:dicebear_styles/adventurer.dart';
-import 'package:dicebear_styles/fun_emoji.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class AvatarWidget extends StatelessWidget {
   final String seed;
@@ -19,6 +14,12 @@ class AvatarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cleanSeed = Uri.encodeComponent(
+      seed.isEmpty ? 'default' : seed,
+    );
+    final url =
+        'https://api.dicebear.com/7.x/$style/svg?seed=$cleanSeed';
+
     return Container(
       width: size,
       height: size,
@@ -28,40 +29,31 @@ class AvatarWidget extends StatelessWidget {
           color: Theme.of(context).colorScheme.secondary,
           width: 3,
         ),
+        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
       ),
       child: ClipOval(
-        child: _buildAvatar(),
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(
+            Icons.person,
+            size: size * 0.6,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            return Center(
+              child: SizedBox(
+                width: size * 0.4,
+                height: size * 0.4,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          },
+        ),
       ),
     );
-  }
-
-  Widget _buildAvatar() {
-    switch (style) {
-      case 'fun-emoji':
-        return DiceBearWidget(
-          style: FunEmojiStyle(
-            options: FunEmojiOptions(seed: seed),
-          ),
-          width: size,
-          height: size,
-        );
-      case 'bottts':
-        return DiceBearWidget(
-          style: BotttsStyle(
-            options: BotttsOptions(seed: seed),
-          ),
-          width: size,
-          height: size,
-        );
-      case 'adventurer':
-      default:
-        return DiceBearWidget(
-          style: AdventurerStyle(
-            options: AdventurerOptions(seed: seed),
-          ),
-          width: size,
-          height: size,
-        );
-    }
   }
 }

@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:awesome_video_player/awesome_video_player.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../data/models/book_model.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
-  final String videoUrl;
-  final String title;
+  final BookModel book;
 
-  const VideoPlayerScreen({
-    super.key,
-    required this.videoUrl,
-    required this.title,
-  });
+  const VideoPlayerScreen({super.key, required this.book});
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -21,28 +18,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _initPlayer();
-  }
-
-  void _initPlayer() {
-    final dataSource = BetterPlayerDataSource(
-      BetterPlayerDataSourceType.network,
-      widget.videoUrl,
-      videoFormat: BetterPlayerVideoFormat.hls,
-    );
-
     _controller = BetterPlayerController(
       const BetterPlayerConfiguration(
         autoPlay: true,
-        looping: false,
         aspectRatio: 16 / 9,
         fit: BoxFit.contain,
-        controlsConfiguration: BetterPlayerControlsConfiguration(
-          showControls: true,
-          showControlsOnInitialize: true,
-        ),
       ),
-      betterPlayerDataSource: dataSource,
+      betterPlayerDataSource: BetterPlayerDataSource(
+        BetterPlayerDataSourceType.network,
+        widget.book.fileUrl,
+      ),
     );
   }
 
@@ -55,7 +40,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(
+          widget.book.title,
+          style: GoogleFonts.vazirmatn(),
+        ),
+      ),
       body: Center(
         child: AspectRatio(
           aspectRatio: 16 / 9,
