@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/theme/theme_controller.dart';
 import '../../core/database/db_helper.dart';
 import '../../core/services/achievement_service.dart';
-import '../../core/widgets/animated_background.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/user_model.dart';
 import '../../services/api_service.dart';
+import '../widgets/animated_background.dart';
 import '../widgets/dicebear_avatar.dart';
 import 'book_detail_screen.dart';
-import 'pdf_reader_screen.dart';
+import 'profile_screen.dart';
+import 'settings_screen.dart';
+import 'achievements_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,61 +25,76 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<BookModel> _books = [];
-  List<BookModel> _filtered = [];
+  List<BookModel> _filteredBooks = [];
   UserModel? _user;
   Map<String, dynamic> _stats = {};
   bool _loading = true;
-  String _category = 'همه';
-  final _categories = ['همه', 'کتاب', 'کتاب صوتی', 'پادکست تصویری'];
-  final _searchCtrl = TextEditingController();
+  String _selectedCategory = 'همه';
+
+  final List<String> _categories = [
+    'همه',
+    'کتاب',
+    'کتاب صوتی',
+    'پادکست تصویری',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadAll();
   }
 
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
+  Future<void> _loadAll() async {
     setState(() => _loading = true);
-    await AchievementService.initialize();
+    try {
+      // راه‌اندازی سرویس دستاورد
+      await AchievementService.initialize();
 
-    var books = await DBHelper.getAllBooks();
-    if (books.isEmpty) {
-      await _seed();
-      books = await DBHelper.getAllBooks();
+      // دریافت کتاب‌ها
+      var books = await DBHelper.getAllBooks();
+      if (books.isEmpty) {
+        await _seedSampleData();
+        books = await DBHelper.getAllBooks();
+      }
+
+      // کاربر جاری
+      final user = await ApiService.getCurrentUser();
+
+      // آمار
+      Map<String, dynamic> stats = {
+        'total_books_read': 0,
+        'total_minutes_read': 0,
+        'current_streak': 0,
+        'xp': 0,
+      };
+      if (user?.id != null) {
+        stats = await DBHelper.getUserStats(user!.id!);
+        // بررسی دستاوردها
+        await AchievementService.checkAndUnlock(user.id!);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _books = books;
+        _filteredBooks = books;
+        _user = user;
+        _stats = stats;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('Load error: $e');
+      if (mounted) setState(() => _loading = false);
     }
-
-    final user = await ApiService.getCurrentUser();
-    Map<String, dynamic> stats = {};
-    if (user?.id != null) {
-      stats = await DBHelper.getUserStats(user!.id!);
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _books = books;
-      _filtered = books;
-      _user = user;
-      _stats = stats;
-      _loading = false;
-    });
   }
 
-  Future<void> _seed() async {
+  Future<void> _seedSampleData() async {
     final samples = [
       BookModel(
         title: 'خاطرات شهید سلیمانی',
         author: 'موسسه شهید',
-        description:
-            'مجموعه‌ای از خاطرات، زندگی‌نامه و درس‌های شهید حاج قاسم سلیمانی',
+        description: 'مجموعه‌ای از خاطرات و زندگی‌نامه شهید حاج قاسم سلیمانی',
         coverUrl: '',
-        fileUrl: 'https://www.africau.edu/images/default/sample.pdf',
+        fileUrl: '',
         filePath: '',
         type: 'pdf',
         category: 'کتاب',
@@ -81,28 +102,40 @@ class _HomeScreenState extends State<HomeScreen> {
         ratingCount: 120,
       ),
       BookModel(
-        title: 'مالک اشتر',
-        author: 'راوی: علی محمدی',
-        description: 'روایت زندگی مالک اشتر، یار باوفای امیرالمؤمنین',
-        coverUrl: '',
-        fileUrl: 'https://www.africau.edu/images/default/sample.pdf',
-        filePath: '',
-        type: 'pdf',
-        category: 'کتاب',
-        rating: 4.5,
-        ratingCount: 85,
-      ),
-      BookModel(
         title: 'از چیزی نمی‌ترسم',
         author: 'محمود فروتن',
-        description: 'روایت‌های کمتر شنیده شده از شهید سلیمانی',
+        description: 'روایت‌های کمتر شنیده‌شده از شهید سلیمانی',
         coverUrl: '',
-        fileUrl: 'https://www.africau.edu/images/default/sample.pdf',
+        fileUrl: '',
         filePath: '',
         type: 'pdf',
         category: 'کتاب',
         rating: 4.7,
         ratingCount: 95,
+      ),
+      BookModel(
+        title: 'کتاب صوتی مالک اشتر',
+        author: 'راوی: علی محمدی',
+        description: 'روایت زندگی مالک اشتر، یار باوفای امیرالمؤمنین',
+        coverUrl: '',
+        fileUrl: '',
+        filePath: '',
+        type: 'audio',
+        category: 'کتاب صوتی',
+        rating: 4.5,
+        ratingCount: 85,
+      ),
+      BookModel(
+        title: 'پادکست تصویری سردار دل‌ها',
+        author: 'گروه رسانه',
+        description: 'مستند تصویری از زندگی و مجاهدت شهید سلیمانی',
+        coverUrl: '',
+        fileUrl: '',
+        filePath: '',
+        type: 'video',
+        category: 'پادکست تصویری',
+        rating: 4.9,
+        ratingCount: 200,
       ),
     ];
     for (final b in samples) {
@@ -110,528 +143,617 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _filter(String cat) {
+  void _filterBooks(String category) {
     setState(() {
-      _category = cat;
-      final q = _searchCtrl.text.trim().toLowerCase();
-      _filtered = _books.where((b) {
-        final matchCat = cat == 'همه' ||
-            (cat == 'کتاب' && b.type == 'pdf') ||
-            (cat == 'کتاب صوتی' && b.type == 'audio') ||
-            (cat == 'پادکست تصویری' && b.type == 'video');
-        final matchQ = q.isEmpty ||
-            b.title.toLowerCase().contains(q) ||
-            b.author.toLowerCase().contains(q);
-        return matchCat && matchQ;
-      }).toList();
+      _selectedCategory = category;
+      if (category == 'همه') {
+        _filteredBooks = _books;
+      } else {
+        final type = _getTypeFromCategory(category);
+        _filteredBooks = _books.where((b) => b.type == type).toList();
+      }
     });
   }
 
+  String _getTypeFromCategory(String category) {
+    switch (category) {
+      case 'کتاب':
+        return 'pdf';
+      case 'کتاب صوتی':
+        return 'audio';
+      case 'پادکست تصویری':
+        return 'video';
+      default:
+        return 'pdf';
+    }
+  }
+
+  int get _xp => (_stats['xp'] as num?)?.toInt() ?? 0;
+  int get _level => AchievementService.levelForXp(_xp);
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final themeController = context.watch<ThemeController>();
 
-    return AnimatedBackground(
-      blobCount: 5,
-      intensity: 0.6,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          bottom: false,
+    return Scaffold(
+      backgroundColor: theme.colorScheme.background,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _loadAll,
+        backgroundColor: theme.colorScheme.primary,
+        child: const Icon(Icons.refresh_rounded, color: Colors.white),
+      ),
+      body: AnimatedBackground(
+        blobCount: 5,
+        intensity: 0.8,
+        child: SafeArea(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
-              : CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  slivers: [
-                    SliverToBoxAdapter(child: _buildHeader(scheme)),
-                    SliverToBoxAdapter(child: _buildStatsRow(scheme)),
-                    SliverToBoxAdapter(child: _buildSearch(scheme)),
-                    SliverToBoxAdapter(child: _buildCategories(scheme)),
-                    SliverToBoxAdapter(child: _buildSectionTitle(scheme)),
-                    _filtered.isEmpty
-                        ? SliverFillRemaining(child: _buildEmpty(scheme))
-                        : SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
-                            sliver: SliverGrid(
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                                childAspectRatio: 0.62,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (_, i) => _BookCard(
-                                  book: _filtered[i],
-                                  index: i,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => BookDetailScreen(
-                                        book: _filtered[i],
-                                      ),
-                                    ),
-                                  ),
-                                  onRead: () => _openBook(_filtered[i]),
-                                ),
-                                childCount: _filtered.length,
-                              ),
-                            ),
-                          ),
-                  ],
+              : RefreshIndicator(
+                  onRefresh: _loadAll,
+                  color: theme.colorScheme.primary,
+                  child: CustomScrollView(
+                    slivers: [
+                      _buildAppBar(theme, themeController),
+                      _buildWelcomeBanner(theme),
+                      _buildStatsRow(theme),
+                      _buildCategoryChips(theme),
+                      _buildBookList(theme),
+                      const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                    ],
+                  ),
                 ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader(ColorScheme scheme) {
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? 'صبح بخیر'
-        : hour < 18
-            ? 'ظهر بخیر'
-            : 'شب بخیر';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  greeting,
-                  style: GoogleFonts.vazirmatn(
-                    fontSize: 14,
-                    color: scheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _user?.name ?? 'کاربر عزیز',
-                  style: GoogleFonts.vazirmatn(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: scheme.onSurface,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_user != null)
-            DiceBearAvatar(
-              seed: _user!.avatarSeed ?? _user!.nationalCode,
-              style: _user!.avatarStyle ?? 'adventurer',
-              size: 54,
-            ),
-        ],
-      ),
-    );
-  }
+  // ==================== AppBar ====================
 
-  Widget _buildStatsRow(ColorScheme scheme) {
-    final xp = _stats['total_xp'] as int? ?? 0;
-    final level = _stats['level'] as int? ?? 1;
-    final streak = _stats['current_streak'] as int? ?? 0;
-    final minutes = _stats['total_minutes'] as int? ?? 0;
-    final xpInLevel = AchievementService.xpInCurrentLevel(xp);
-    final xpNeeded = AchievementService.xpForNextLevel(level);
-    final progress = xpNeeded == 0 ? 0.0 : (xpInLevel / xpNeeded).clamp(0, 1);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              scheme.primary,
-              scheme.primary.withOpacity(0.75),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: scheme.primary.withOpacity(0.25),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Column(
+  Widget _buildAppBar(ThemeData theme, ThemeController themeController) {
+    return SliverAppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      floating: true,
+      pinned: false,
+      expandedHeight: 80,
+      flexibleSpace: FlexibleSpaceBar(
+        titlePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        title: Row(
           children: [
-            Row(
-              children: [
-                _statChip('سطح $level', Icons.military_tech, Colors.white),
-                const SizedBox(width: 8),
-                _statChip('$xp XP', Icons.bolt, Colors.amber),
-                const Spacer(),
-                _statChip('$streak روز', Icons.local_fire_department,
-                    Colors.orangeAccent),
-              ],
+            // آواتار کاربر
+            DiceBearAvatar(
+              seed: _user?.avatarSeed ?? _user?.nationalCode ?? 'shahid',
+              style: _user?.avatarStyle ?? 'adventurer',
+              size: 40,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                );
+              },
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      value: progress.toDouble(),
-                      minHeight: 8,
-                      backgroundColor: Colors.white.withOpacity(0.2),
-                      valueColor: const AlwaysStoppedAnimation(Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'سلام، ${_user?.name.split(' ').first ?? 'کاربر'}',
+                    style: GoogleFonts.vazirmatn(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  '$xpInLevel/$xpNeeded',
-                  style: GoogleFonts.vazirmatn(
-                    fontSize: 12,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                  Text(
+                    'کتابخانه شهید سلیمانی',
+                    style: GoogleFonts.vazirmatn(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$minutes دقیقه مطالعه',
-              style: GoogleFonts.vazirmatn(
-                fontSize: 12,
-                color: Colors.white.withOpacity(0.85),
+                ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _statChip(String text, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: GoogleFonts.vazirmatn(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+      actions: [
+        IconButton(
+          icon: Icon(
+            themeController.isDark
+                ? Icons.light_mode_rounded
+                : Icons.dark_mode_rounded,
+            color: theme.colorScheme.onSurface,
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearch(ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: TextField(
-        controller: _searchCtrl,
-        onChanged: (_) => _filter(_category),
-        decoration: InputDecoration(
-          hintText: 'جستجو در کتاب‌ها...',
-          prefixIcon: Icon(Icons.search_rounded, color: scheme.primary),
-          suffixIcon: _searchCtrl.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    _searchCtrl.clear();
-                    _filter(_category);
-                  },
-                )
-              : null,
+          onPressed: () => themeController.toggle(),
         ),
-      ),
+        IconButton(
+          icon: Icon(Icons.settings_rounded,
+              color: theme.colorScheme.onSurface),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            );
+          },
+        ),
+      ],
     );
   }
 
-  Widget _buildCategories(ColorScheme scheme) {
-    return SizedBox(
-      height: 48,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        itemCount: _categories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, i) {
-          final c = _categories[i];
-          final active = c == _category;
-          return GestureDetector(
-            onTap: () => _filter(c),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              decoration: BoxDecoration(
-                color: active
-                    ? scheme.primary
-                    : scheme.primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: active
-                    ? [
-                        BoxShadow(
-                          color: scheme.primary.withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Text(
-                c,
-                style: GoogleFonts.vazirmatn(
-                  color: active ? scheme.onPrimary : scheme.primary,
-                  fontWeight: active ? FontWeight.bold : FontWeight.w500,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  // ==================== Welcome Banner ====================
 
-  Widget _buildSectionTitle(ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 20,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'کتاب‌های موجود',
-            style: GoogleFonts.vazirmatn(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: scheme.onSurface,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            '${_filtered.length} کتاب',
-            style: GoogleFonts.vazirmatn(
-              fontSize: 13,
-              color: scheme.onSurface.withOpacity(0.5),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildWelcomeBanner(ThemeData theme) {
+    final xpInLevel =
+        AchievementService.xpInCurrentLevel(_xp).toDouble();
+    final xpNeeded =
+        AchievementService.xpForLevel(_level).toDouble();
+    final progress = (xpInLevel / xpNeeded).clamp(0.0, 1.0);
 
-  Widget _buildEmpty(ColorScheme scheme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.menu_book_outlined,
-              size: 100, color: scheme.primary.withOpacity(0.3)),
-          const SizedBox(height: 16),
-          Text(
-            'کتابی پیدا نشد',
-            style: GoogleFonts.vazirmatn(
-              fontSize: 16,
-              color: scheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _openBook(BookModel book) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => PdfReaderScreen(book: book)),
-    );
-  }
-}
-
-class _BookCard extends StatelessWidget {
-  final BookModel book;
-  final int index;
-  final VoidCallback onTap;
-  final VoidCallback onRead;
-
-  const _BookCard({
-    required this.book,
-    required this.index,
-    required this.onTap,
-    required this.onRead,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 400 + index * 60),
-      curve: Curves.easeOutCubic,
-      tween: Tween(begin: 0, end: 1),
-      builder: (context, v, child) {
-        return Transform.translate(
-          offset: Offset(0, 30 * (1 - v)),
-          child: Opacity(opacity: v, child: child),
-        );
-      },
-      child: GestureDetector(
-        onTap: onTap,
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
         child: Container(
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: scheme.surface,
+            gradient: LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withOpacity(0.75),
+                theme.colorScheme.secondary.withOpacity(0.9),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: scheme.primary.withOpacity(0.1),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+                color: theme.colorScheme.primary.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: Container(
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          scheme.primary.withOpacity(0.85),
-                          scheme.primary.withOpacity(0.6),
-                        ],
-                      ),
+                      color: Colors.white.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Stack(
+                    child: const Icon(Icons.auto_awesome,
+                        color: Colors.white, size: 26),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Center(
-                          child: Icon(
-                            book.type == 'pdf'
-                                ? Icons.picture_as_pdf_rounded
-                                : book.type == 'audio'
-                                    ? Icons.headphones_rounded
-                                    : Icons.videocam_rounded,
-                            size: 60,
-                            color: Colors.white.withOpacity(0.9),
+                        Text(
+                          'سطح $_level',
+                          style: GoogleFonts.vazirmatn(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
                           ),
                         ),
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.star_rounded,
-                                    size: 12, color: Colors.amber),
-                                const SizedBox(width: 2),
-                                Text(
-                                  book.rating.toStringAsFixed(1),
-                                  style: GoogleFonts.vazirmatn(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        Text(
+                          '$_xp XP کل',
+                          style: GoogleFonts.vazirmatn(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.85),
                           ),
                         ),
                       ],
                     ),
                   ),
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AchievementsScreen(),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.emoji_events_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: progress.toDouble(),
+                  minHeight: 8,
+                  backgroundColor: Colors.white.withOpacity(0.2),
+                  valueColor: const AlwaysStoppedAnimation(Colors.white),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      book.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.vazirmatn(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      book.author,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.vazirmatn(
-                        fontSize: 11,
-                        color: scheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: onRead,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: scheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.play_arrow_rounded,
-                                size: 16, color: scheme.primary),
-                            const SizedBox(width: 4),
-                            Text(
-                              'مطالعه',
-                              style: GoogleFonts.vazirmatn(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: scheme.primary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 8),
+              Text(
+                '${xpInLevel.toInt()} / ${xpNeeded.toInt()} XP تا سطح ${_level + 1}',
+                style: GoogleFonts.vazirmatn(
+                  fontSize: 11,
+                  color: Colors.white.withOpacity(0.85),
+                ),
+              ),
+            ],
+          ),
+        )
+            .animate()
+            .fadeIn(duration: 500.ms)
+            .slideY(begin: 0.15, end: 0, curve: Curves.easeOutCubic),
+      ),
+    );
+  }
+
+  // ==================== Stats Row ====================
+
+  Widget _buildStatsRow(ThemeData theme) {
+    final booksRead = (_stats['total_books_read'] as num?)?.toInt() ?? 0;
+    final minutes = (_stats['total_minutes_read'] as num?)?.toInt() ?? 0;
+    final streak = (_stats['current_streak'] as num?)?.toInt() ?? 0;
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            _statCard(
+              theme,
+              icon: Icons.menu_book_rounded,
+              label: 'کتاب',
+              value: '$booksRead',
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 12),
+            _statCard(
+              theme,
+              icon: Icons.timer_rounded,
+              label: 'دقیقه',
+              value: '$minutes',
+              color: Colors.orange,
+            ),
+            const SizedBox(width: 12),
+            _statCard(
+              theme,
+              icon: Icons.local_fire_department_rounded,
+              label: 'استریک',
+              value: '$streak',
+              color: Colors.redAccent,
+            ),
+          ],
+        )
+            .animate()
+            .fadeIn(delay: 100.ms, duration: 500.ms)
+            .slideY(begin: 0.15, end: 0),
+      ),
+    );
+  }
+
+  Widget _statCard(
+    ThemeData theme, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withOpacity(0.15), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 26),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: GoogleFonts.vazirmatn(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            Text(
+              label,
+              style: GoogleFonts.vazirmatn(
+                fontSize: 11,
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==================== Category Chips ====================
+
+  Widget _buildCategoryChips(ThemeData theme) {
+    return SliverToBoxAdapter(
+      child: SizedBox(
+        height: 60,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: _categories.length,
+          itemBuilder: (context, i) {
+            final cat = _categories[i];
+            final active = _selectedCategory == cat;
+            return Padding(
+              padding: const EdgeInsets.only(left: 8, top: 8, bottom: 8),
+              child: ChoiceChip(
+                label: Text(cat),
+                selected: active,
+                onSelected: (_) => _filterBooks(cat),
+                labelStyle: GoogleFonts.vazirmatn(
+                  color: active
+                      ? Colors.white
+                      : theme.colorScheme.onSurface,
+                  fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                ),
+                selectedColor: theme.colorScheme.primary,
+                backgroundColor: theme.colorScheme.surface,
+                side: BorderSide(
+                  color: active
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.primary.withOpacity(0.2),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // ==================== Book List ====================
+
+  Widget _buildBookList(ThemeData theme) {
+    if (_filteredBooks.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.menu_book_outlined,
+                  size: 80,
+                  color: theme.colorScheme.primary.withOpacity(0.3)),
+              const SizedBox(height: 16),
+              Text(
+                'کتابی یافت نشد',
+                style: GoogleFonts.vazirmatn(
+                  fontSize: 16,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
                 ),
               ),
             ],
           ),
         ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.all(16),
+      sliver: SliverList.builder(
+        itemCount: _filteredBooks.length,
+        itemBuilder: (context, i) {
+          return _BookCard(
+            book: _filteredBooks[i],
+            index: i,
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => BookDetailScreen(book: _filteredBooks[i]),
+                ),
+              );
+              _loadAll();
+            },
+          );
+        },
       ),
     );
+  }
+}
+
+// ==================== Book Card ====================
+
+class _BookCard extends StatelessWidget {
+  final BookModel book;
+  final int index;
+  final VoidCallback onTap;
+
+  const _BookCard({
+    required this.book,
+    required this.index,
+    required this.onTap,
+  });
+
+  IconData _icon() {
+    switch (book.type) {
+      case 'pdf':
+        return Icons.picture_as_pdf_rounded;
+      case 'audio':
+        return Icons.headphones_rounded;
+      case 'video':
+        return Icons.videocam_rounded;
+      default:
+        return Icons.book_rounded;
+    }
+  }
+
+  Color _color(ThemeData theme) {
+    switch (book.type) {
+      case 'pdf':
+        return theme.colorScheme.primary;
+      case 'audio':
+        return Colors.orange;
+      case 'video':
+        return Colors.redAccent;
+      default:
+        return theme.colorScheme.primary;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = _color(theme);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: color.withOpacity(0.15),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.08),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Hero(
+                  tag: 'book_${book.id}',
+                  child: Container(
+                    width: 64,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          color.withOpacity(0.25),
+                          color.withOpacity(0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: color.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(_icon(), color: color, size: 32),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        book.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.vazirmatn(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        book.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.vazirmatn(
+                          fontSize: 12,
+                          color:
+                              theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.star_rounded,
+                              color: theme.colorScheme.secondary, size: 16),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${book.rating.toStringAsFixed(1)}',
+                            style: GoogleFonts.vazirmatn(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '(${book.ratingCount})',
+                            style: GoogleFonts.vazirmatn(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurface
+                                  .withOpacity(0.5),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (book.isDownloaded)
+                            Icon(Icons.download_done_rounded,
+                                color: color, size: 18),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_back_ios_rounded,
+                  size: 16,
+                  color: theme.colorScheme.onSurface.withOpacity(0.3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    )
+        .animate()
+        .fadeIn(delay: (60 * index).ms, duration: 400.ms)
+        .slideX(begin: 0.1, end: 0, curve: Curves.easeOutCubic);
   }
 }

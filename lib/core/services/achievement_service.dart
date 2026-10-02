@@ -1,244 +1,254 @@
 import 'package:flutter/material.dart';
-
-class AchievementModel {
-  final String id;
-  final String title;
-  final String description;
-  final String icon;
-  final int target;
-  final String type; // 'books', 'minutes', 'streak', 'rating'
-  final Color color;
-
-  const AchievementModel({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.target,
-    required this.type,
-    this.color = const Color(0xFFFFD700),
-  });
-}
+import '../../data/models/achievement_model.dart';
+import '../../core/database/db_helper.dart';
 
 class AchievementService {
-  static const List<AchievementModel> all = [
-    AchievementModel(
-      id: 'first_book',
+  /// لیست تمام دستاوردهای ممکن
+  static final List<AchievementModel> allAchievements = [
+    // ============ برنزی ============
+    const AchievementModel(
+      id: 'first_read',
       title: 'شروع‌کننده',
-      description: 'اولین کتابت رو تمام کن',
+      description: 'اولین کتاب خود را باز کنید',
       icon: '📖',
       target: 1,
       type: 'books',
-      color: Color(0xFF66BB6A),
+      tier: AchievementTier.bronze,
     ),
-    AchievementModel(
-      id: 'five_books',
+    const AchievementModel(
+      id: 'read_5',
       title: 'کتاب‌خوان',
-      description: '۵ کتاب تمام کن',
+      description: '۵ کتاب بخوانید',
       icon: '📚',
       target: 5,
       type: 'books',
-      color: Color(0xFF42A5F5),
+      tier: AchievementTier.bronze,
     ),
-    AchievementModel(
-      id: 'twenty_books',
-      title: 'کتاب‌خوار',
-      description: '۲۰ کتاب تمام کن',
-      icon: '🍽️',
-      target: 20,
-      type: 'books',
-      color: Color(0xFF7E57C2),
-    ),
-    AchievementModel(
-      id: 'fifty_books',
-      title: 'افسانه کتاب',
-      description: '۵۰ کتاب تمام کن',
-      icon: '👑',
-      target: 50,
-      type: 'books',
-      color: Color(0xFFFFB300),
-    ),
-    AchievementModel(
-      id: 'first_minute',
-      title: 'اولین قدم',
-      description: 'اولین دقیقه مطالعه',
+    const AchievementModel(
+      id: 'minutes_60',
+      title: 'یک ساعت مطالعه',
+      description: '۶۰ دقیقه مطالعه کنید',
       icon: '⏱️',
-      target: 1,
-      type: 'minutes',
-      color: Color(0xFF26A69A),
-    ),
-    AchievementModel(
-      id: 'one_hour',
-      title: 'یک ساعت طلایی',
-      description: 'یک ساعت مطالعه کن',
-      icon: '🕐',
       target: 60,
       type: 'minutes',
-      color: Color(0xFFEC407A),
+      tier: AchievementTier.bronze,
     ),
-    AchievementModel(
-      id: 'ten_hours',
-      title: 'کتابخانه‌گرد',
-      description: '۱۰ ساعت مطالعه کن',
-      icon: '🏛️',
-      target: 600,
-      type: 'minutes',
-      color: Color(0xFF8D6E63),
-    ),
-    AchievementModel(
-      id: 'fifty_hours',
-      title: 'فیلسوف',
-      description: '۵۰ ساعت مطالعه کن',
-      icon: '🧠',
-      target: 3000,
-      type: 'minutes',
-      color: Color(0xFF5C6BC0),
-    ),
-    AchievementModel(
+    const AchievementModel(
       id: 'streak_3',
-      title: 'مستمر',
+      title: 'شروع استمرار',
       description: '۳ روز متوالی مطالعه',
       icon: '🔥',
       target: 3,
       type: 'streak',
-      color: Color(0xFFFF7043),
+      tier: AchievementTier.bronze,
     ),
-    AchievementModel(
+
+    // ============ نقره‌ای ============
+    const AchievementModel(
+      id: 'read_20',
+      title: 'کتاب‌خوار',
+      description: '۲۰ کتاب بخوانید',
+      icon: '🍽️',
+      target: 20,
+      type: 'books',
+      tier: AchievementTier.silver,
+    ),
+    const AchievementModel(
+      id: 'minutes_600',
+      title: 'ده ساعت مطالعه',
+      description: '۶۰۰ دقیقه مطالعه کنید',
+      icon: '⌛',
+      target: 600,
+      type: 'minutes',
+      tier: AchievementTier.silver,
+    ),
+    const AchievementModel(
       id: 'streak_7',
-      title: 'قهرمان هفته',
+      title: 'هفته طلایی',
       description: '۷ روز متوالی مطالعه',
-      icon: '🏆',
+      icon: '⭐',
       target: 7,
       type: 'streak',
-      color: Color(0xFFFFA726),
+      tier: AchievementTier.silver,
     ),
-    AchievementModel(
-      id: 'streak_30',
-      title: 'یک ماه کامل',
-      description: '۳۰ روز متوالی مطالعه',
-      icon: '💎',
-      target: 30,
-      type: 'streak',
-      color: Color(0xFF29B6F6),
-    ),
-    AchievementModel(
-      id: 'streak_100',
-      title: 'افسانه استمرار',
-      description: '۱۰۰ روز متوالی مطالعه',
-      icon: '⭐',
-      target: 100,
-      type: 'streak',
-      color: Color(0xFFAB47BC),
-    ),
-    AchievementModel(
-      id: 'first_rating',
+    const AchievementModel(
+      id: 'rate_10',
       title: 'منتقد',
-      description: 'اولین امتیازت رو بده',
-      icon: '✨',
-      target: 1,
-      type: 'rating',
-      color: Color(0xFFFFCA28),
-    ),
-    AchievementModel(
-      id: 'ten_ratings',
-      title: 'ستاره‌شناس',
-      description: '۱۰ امتیاز ثبت کن',
-      icon: '🌟',
+      description: 'به ۱۰ کتاب امتیاز بدهید',
+      icon: '✍️',
       target: 10,
       type: 'rating',
-      color: Color(0xFFFFD54F),
+      tier: AchievementTier.silver,
+    ),
+
+    // ============ طلایی ============
+    const AchievementModel(
+      id: 'read_50',
+      title: 'کتاب‌دوست',
+      description: '۵۰ کتاب بخوانید',
+      icon: '💎',
+      target: 50,
+      type: 'books',
+      tier: AchievementTier.gold,
+    ),
+    const AchievementModel(
+      id: 'minutes_3000',
+      title: 'پنجاه ساعت مطالعه',
+      description: '۳۰۰۰ دقیقه مطالعه کنید',
+      icon: '🏅',
+      target: 3000,
+      type: 'minutes',
+      tier: AchievementTier.gold,
+    ),
+    const AchievementModel(
+      id: 'streak_30',
+      title: 'قهرمان ماه',
+      description: '۳۰ روز متوالی مطالعه',
+      icon: '🏆',
+      target: 30,
+      type: 'streak',
+      tier: AchievementTier.gold,
+    ),
+
+    // ============ افسانه‌ای ============
+    const AchievementModel(
+      id: 'read_100',
+      title: 'افسانه کتاب',
+      description: '۱۰۰ کتاب بخوانید',
+      icon: '👑',
+      target: 100,
+      type: 'books',
+      tier: AchievementTier.legendary,
+    ),
+    const AchievementModel(
+      id: 'streak_100',
+      title: 'صد روز استمرار',
+      description: '۱۰۰ روز متوالی مطالعه',
+      icon: '🌟',
+      target: 100,
+      type: 'streak',
+      tier: AchievementTier.legendary,
+    ),
+    const AchievementModel(
+      id: 'minutes_10000',
+      title: 'استاد زمان',
+      description: '۱۰۰۰۰ دقیقه مطالعه کنید',
+      icon: '🎖️',
+      target: 10000,
+      type: 'minutes',
+      tier: AchievementTier.legendary,
+    ),
+    const AchievementModel(
+      id: 'night_owl',
+      title: 'شب‌زنده‌دار',
+      description: 'بین ۲ تا ۴ صبح مطالعه کنید',
+      icon: '🌙',
+      target: 1,
+      type: 'special',
+      tier: AchievementTier.legendary,
     ),
   ];
 
-  /// محاسبه دستاوردهای کسب‌شده
-  static List<AchievementModel> getUnlocked({
-    required int booksRead,
-    required int minutesRead,
-    required int currentStreak,
-    required int ratingsCount,
-  }) {
-    return all.where((a) {
-      switch (a.type) {
-        case 'books':
-          return booksRead >= a.target;
-        case 'minutes':
-          return minutesRead >= a.target;
-        case 'streak':
-          return currentStreak >= a.target;
-        case 'rating':
-          return ratingsCount >= a.target;
-        default:
-          return false;
-      }
-    }).toList();
+  // ============ راه‌اندازی ============
+  static Future<void> initialize() async {
+    // بارگذاری دستاوردهای باز شده از دیتابیس
+    final unlocked = await DBHelper.getUnlockedAchievements();
+    AchievementModel.setUnlocked(unlocked);
   }
 
-  /// محاسبه دستاورد بعدی (نزدیک‌ترین)
-  static AchievementModel? getNextAchievement({
-    required int booksRead,
-    required int minutesRead,
-    required int currentStreak,
-    required int ratingsCount,
-  }) {
-    AchievementModel? next;
-    int minRemaining = 999999;
+  // ============ بررسی و باز کردن دستاوردها ============
+  static Future<List<AchievementModel>> checkAndUnlock(int userId) async {
+    final stats = await DBHelper.getUserStats(userId);
+    final unlockedList = <AchievementModel>[];
+    final currentlyUnlocked = await DBHelper.getUnlockedAchievements();
 
-    for (final a in all) {
-      int current;
+    final booksRead = (stats['total_books_read'] as num?)?.toInt() ?? 0;
+    final minutesRead = (stats['total_minutes_read'] as num?)?.toInt() ?? 0;
+    final streak = (stats['current_streak'] as num?)?.toInt() ?? 0;
+    final ratingsCount = (stats['total_ratings'] as num?)?.toInt() ?? 0;
+
+    for (final a in allAchievements) {
+      if (currentlyUnlocked.contains(a.id)) continue;
+
+      bool earned = false;
       switch (a.type) {
         case 'books':
-          current = booksRead;
+          earned = booksRead >= a.target;
           break;
         case 'minutes':
-          current = minutesRead;
+          earned = minutesRead >= a.target;
           break;
         case 'streak':
-          current = currentStreak;
+          earned = streak >= a.target;
           break;
         case 'rating':
-          current = ratingsCount;
+          earned = ratingsCount >= a.target;
           break;
-        default:
-          continue;
+        case 'special':
+          earned = false; // دستی باز می‌شود
+          break;
       }
 
-      if (current < a.target) {
-        final remaining = a.target - current;
-        if (remaining < minRemaining) {
-          minRemaining = remaining;
-          next = a;
-        }
+      if (earned) {
+        await DBHelper.unlockAchievement(userId, a.id);
+        AchievementModel.markUnlocked(a.id);
+        unlockedList.add(a);
       }
     }
-    return next;
+
+    return unlockedList;
   }
 
-  /// محاسبه درصد پیشرفت
-  static double getProgress({
-    required AchievementModel achievement,
-    required int booksRead,
-    required int minutesRead,
-    required int currentStreak,
-    required int ratingsCount,
-  }) {
-    int current;
-    switch (achievement.type) {
-      case 'books':
-        current = booksRead;
-        break;
-      case 'minutes':
-        current = minutesRead;
-        break;
-      case 'streak':
-        current = currentStreak;
-        break;
-      case 'rating':
-        current = ratingsCount;
-        break;
-      default:
-        return 0;
+  // ============ محاسبه XP ============
+  static int xpForLevel(int level) {
+    // فرمول: هر سطح ۱۰۰ XP بیشتر از قبلی
+    return 100 + (level - 1) * 50;
+  }
+
+  static int xpInCurrentLevel(int totalXp) {
+    int level = 1;
+    int remaining = totalXp;
+    while (remaining >= xpForLevel(level)) {
+      remaining -= xpForLevel(level);
+      level++;
     }
-    if (achievement.target == 0) return 0;
-    return (current / achievement.target).clamp(0.0, 1.0);
+    return remaining;
+  }
+
+  static int levelForXp(int totalXp) {
+    int level = 1;
+    int remaining = totalXp;
+    while (remaining >= xpForLevel(level)) {
+      remaining -= xpForLevel(level);
+      level++;
+    }
+    return level;
+  }
+
+  // ============ رنگ هر سطح دستاورد ============
+  static Color colorForTier(AchievementTier tier) {
+    switch (tier) {
+      case AchievementTier.bronze:
+        return const Color(0xFFCD7F32);
+      case AchievementTier.silver:
+        return const Color(0xFFC0C0C0);
+      case AchievementTier.gold:
+        return const Color(0xFFFFD700);
+      case AchievementTier.legendary:
+        return const Color(0xFF9C27B0);
+    }
+  }
+
+  static String labelForTier(AchievementTier tier) {
+    switch (tier) {
+      case AchievementTier.bronze:
+        return 'برنزی';
+      case AchievementTier.silver:
+        return 'نقره‌ای';
+      case AchievementTier.gold:
+        return 'طلایی';
+      case AchievementTier.legendary:
+        return 'افسانه‌ای';
+    }
   }
 }

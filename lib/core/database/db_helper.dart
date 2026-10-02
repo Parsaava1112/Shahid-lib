@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../data/models/user_model.dart';
@@ -36,7 +35,7 @@ class DBHelper {
   }
 
   static Future<void> _onCreate(Database db, int version) async {
-    // ==================== کاربران ====================
+    // کاربران
     await db.execute('''
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,7 +49,7 @@ class DBHelper {
       )
     ''');
 
-    // ==================== کتاب‌ها ====================
+    // کتاب‌ها
     await db.execute('''
       CREATE TABLE books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +69,7 @@ class DBHelper {
       )
     ''');
 
-    // ==================== امتیازات ====================
+    // امتیازات
     await db.execute('''
       CREATE TABLE ratings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,12 +77,11 @@ class DBHelper {
         user_name TEXT NOT NULL,
         rating REAL NOT NULL,
         comment TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
+        created_at TEXT NOT NULL
       )
     ''');
 
-    // ==================== فعالیت‌ها ====================
+    // فعالیت‌ها
     await db.execute('''
       CREATE TABLE user_activities (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,23 +90,11 @@ class DBHelper {
         action TEXT NOT NULL,
         minutes_read INTEGER DEFAULT 0,
         current_streak INTEGER DEFAULT 1,
-        last_activity TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        last_activity TEXT NOT NULL
       )
     ''');
 
-    // ==================== صف همگام‌سازی ====================
-    await db.execute('''
-      CREATE TABLE sync_queue (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        operation TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        retry_count INTEGER DEFAULT 0
-      )
-    ''');
-
-    // ==================== پیشرفت مطالعه ====================
+    // پیشرفت مطالعه
     await db.execute('''
       CREATE TABLE reading_progress (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,7 +108,7 @@ class DBHelper {
       )
     ''');
 
-    // ==================== نشانک‌ها ====================
+    // نشانک‌ها
     await db.execute('''
       CREATE TABLE bookmarks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,13 +120,33 @@ class DBHelper {
       )
     ''');
 
-    // ==================== ایندکس‌ها ====================
+    // دستاوردها
+    await db.execute('''
+      CREATE TABLE achievements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        achievement_id TEXT NOT NULL,
+        unlocked_at TEXT NOT NULL,
+        UNIQUE(user_id, achievement_id)
+      )
+    ''');
+
+    // صف همگام‌سازی
+    await db.execute('''
+      CREATE TABLE sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        retry_count INTEGER DEFAULT 0
+      )
+    ''');
+
+    // ایندکس‌ها
     await db.execute('CREATE INDEX idx_books_type ON books (type)');
-    await db.execute('CREATE INDEX idx_books_category ON books (category)');
     await db.execute('CREATE INDEX idx_ratings_book ON ratings (book_id)');
-    await db.execute('CREATE INDEX idx_activities_user ON user_activities (user_id)');
-    await db.execute('CREATE INDEX idx_progress_user_book ON reading_progress (user_id, book_id)');
-    await db.execute('CREATE INDEX idx_bookmarks_user_book ON bookmarks (user_id, book_id)');
+    await db.execute(
+        'CREATE INDEX idx_activities_user ON user_activities (user_id)');
   }
 
   static Future<void> _onUpgrade(
@@ -171,10 +177,28 @@ class DBHelper {
           created_at TEXT NOT NULL
         )
       ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS achievements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          achievement_id TEXT NOT NULL,
+          unlocked_at TEXT NOT NULL,
+          UNIQUE(user_id, achievement_id)
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sync_queue (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          operation TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          retry_count INTEGER DEFAULT 0
+        )
+      ''');
     }
   }
 
-  // ==================== عملیات کاربران ====================
+  // ==================== کاربران ====================
 
   static Future<int> insertUser(UserModel user) async {
     final db = await database;
@@ -228,12 +252,7 @@ class DBHelper {
     );
   }
 
-  static Future<int> deleteUser(int id) async {
-    final db = await database;
-    return await db.delete('users', where: 'id = ?', whereArgs: [id]);
-  }
-
-  // ==================== عملیات کتاب‌ها ====================
+  // ==================== کتاب‌ها ====================
 
   static Future<int> insertBook(BookModel book) async {
     final db = await database;
@@ -244,21 +263,6 @@ class DBHelper {
       map,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-  }
-
-  static Future<void> insertBooks(List<BookModel> books) async {
-    final db = await database;
-    final batch = db.batch();
-    for (final book in books) {
-      final map = book.toMap();
-      map['created_at'] = DateTime.now().toIso8601String();
-      batch.insert(
-        'books',
-        map,
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    await batch.commit(noResult: true);
   }
 
   static Future<List<BookModel>> getAllBooks() async {
@@ -273,17 +277,6 @@ class DBHelper {
       'books',
       where: 'type = ?',
       whereArgs: [type],
-      orderBy: 'title ASC',
-    );
-    return maps.map((e) => BookModel.fromMap(e)).toList();
-  }
-
-  static Future<List<BookModel>> getBooksByCategory(String category) async {
-    final db = await database;
-    final maps = await db.query(
-      'books',
-      where: 'category = ?',
-      whereArgs: [category],
       orderBy: 'title ASC',
     );
     return maps.map((e) => BookModel.fromMap(e)).toList();
@@ -309,28 +302,6 @@ class DBHelper {
     );
     if (maps.isNotEmpty) return BookModel.fromMap(maps.first);
     return null;
-  }
-
-  static Future<List<BookModel>> searchBooks(String query) async {
-    final db = await database;
-    final maps = await db.query(
-      'books',
-      where: 'title LIKE ? OR author LIKE ? OR description LIKE ?',
-      whereArgs: ['%$query%', '%$query%', '%$query%'],
-      orderBy: 'title ASC',
-    );
-    return maps.map((e) => BookModel.fromMap(e)).toList();
-  }
-
-  static Future<List<BookModel>> getTopRatedBooks({int limit = 10}) async {
-    final db = await database;
-    final maps = await db.query(
-      'books',
-      where: 'rating > 0',
-      orderBy: 'rating DESC',
-      limit: limit,
-    );
-    return maps.map((e) => BookModel.fromMap(e)).toList();
   }
 
   static Future<int> updateBook(BookModel book) async {
@@ -363,12 +334,7 @@ class DBHelper {
     return await db.delete('books', where: 'id = ?', whereArgs: [id]);
   }
 
-  static Future<void> deleteAllBooks() async {
-    final db = await database;
-    await db.delete('books');
-  }
-
-  // ==================== عملیات امتیازات ====================
+  // ==================== امتیازات ====================
 
   static Future<int> insertRating(RatingModel rating) async {
     final db = await database;
@@ -384,18 +350,6 @@ class DBHelper {
       orderBy: 'created_at DESC',
     );
     return maps.map((e) => RatingModel.fromMap(e)).toList();
-  }
-
-  static Future<double> getAverageRating(int bookId) async {
-    final db = await database;
-    final result = await db.rawQuery(
-      'SELECT AVG(rating) as avg_rating FROM ratings WHERE book_id = ?',
-      [bookId],
-    );
-    if (result.isNotEmpty) {
-      return (result.first['avg_rating'] as num?)?.toDouble() ?? 0.0;
-    }
-    return 0.0;
   }
 
   static Future<void> updateBookRating(int bookId) async {
@@ -417,12 +371,7 @@ class DBHelper {
     }
   }
 
-  static Future<int> deleteRating(int id) async {
-    final db = await database;
-    return await db.delete('ratings', where: 'id = ?', whereArgs: [id]);
-  }
-
-  // ==================== عملیات فعالیت‌ها ====================
+  // ==================== فعالیت‌ها ====================
 
   static Future<int> recordActivity({
     required int userId,
@@ -468,7 +417,8 @@ class DBHelper {
       int streak = 1;
       if (yesterdayActivity.isNotEmpty) {
         streak =
-            ((yesterdayActivity.first['current_streak'] as num?)?.toInt() ?? 1) +
+            ((yesterdayActivity.first['current_streak'] as num?)?.toInt() ??
+                    1) +
                 1;
       }
 
@@ -483,90 +433,89 @@ class DBHelper {
     }
   }
 
-  static Future<int> getCurrentStreak(int userId) async {
+  // ==================== آمار کاربر ====================
+
+  static Future<Map<String, dynamic>> getUserStats(int userId) async {
     final db = await database;
-    final result = await db.query(
+
+    final booksResult = await db.rawQuery(
+      'SELECT COUNT(DISTINCT book_id) as count FROM user_activities '
+      'WHERE user_id = ? AND action IN ("read", "complete")',
+      [userId],
+    );
+    final booksRead = (booksResult.first['count'] as num?)?.toInt() ?? 0;
+
+    final minutesResult = await db.rawQuery(
+      'SELECT SUM(minutes_read) as total FROM user_activities '
+      'WHERE user_id = ?',
+      [userId],
+    );
+    final minutesRead =
+        (minutesResult.first['total'] as num?)?.toInt() ?? 0;
+
+    final streakResult = await db.query(
       'user_activities',
       where: 'user_id = ?',
       whereArgs: [userId],
       orderBy: 'last_activity DESC',
       limit: 1,
     );
-    if (result.isNotEmpty) {
-      return (result.first['current_streak'] as num?)?.toInt() ?? 0;
+    final streak = streakResult.isNotEmpty
+        ? (streakResult.first['current_streak'] as num?)?.toInt() ?? 0
+        : 0;
+
+    final ratingsResult = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM ratings',
+    );
+    final ratingsCount =
+        (ratingsResult.first['count'] as num?)?.toInt() ?? 0;
+
+    final xp = (booksRead * 100) + (minutesRead ~/ 10) + (streak * 50);
+
+    return {
+      'total_books_read': booksRead,
+      'total_minutes_read': minutesRead,
+      'current_streak': streak,
+      'total_ratings': ratingsCount,
+      'xp': xp,
+    };
+  }
+
+  // ==================== دستاوردها ====================
+
+  static Future<List<String>> getUnlockedAchievements() async {
+    final db = await database;
+    try {
+      final rows = await db.query('achievements');
+      return rows.map((r) => r['achievement_id'] as String).toList();
+    } catch (_) {
+      return [];
     }
-    return 0;
   }
 
-  static Future<int> getTotalMinutes(int userId) async {
+  static Future<void> unlockAchievement(
+      int userId, String achievementId) async {
     final db = await database;
-    final result = await db.rawQuery(
-      'SELECT SUM(minutes_read) as total FROM user_activities WHERE user_id = ?',
-      [userId],
-    );
-    if (result.isNotEmpty) {
-      return (result.first['total'] as num?)?.toInt() ?? 0;
+    try {
+      await db.insert(
+        'achievements',
+        {
+          'user_id': userId,
+          'achievement_id': achievementId,
+          'unlocked_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
+  }
+
+  static Future<List<Map<String, dynamic>>> getAchievements() async {
+    final db = await database;
+    try {
+      return await db.query('achievements');
+    } catch (_) {
+      return [];
     }
-    return 0;
-  }
-
-  static Future<int> getBooksReadCount(int userId) async {
-    final db = await database;
-    final result = await db.rawQuery(
-      'SELECT COUNT(DISTINCT book_id) as count FROM user_activities '
-      'WHERE user_id = ? AND action IN ("read", "complete")',
-      [userId],
-    );
-    if (result.isNotEmpty) {
-      return (result.first['count'] as num?)?.toInt() ?? 0;
-    }
-    return 0;
-  }
-
-  static Future<List<Map<String, dynamic>>> getUserActivities(
-      int userId) async {
-    final db = await database;
-    return await db.query(
-      'user_activities',
-      where: 'user_id = ?',
-      whereArgs: [userId],
-      orderBy: 'last_activity DESC',
-    );
-  }
-
-  // ==================== صف همگام‌سازی ====================
-
-  static Future<int> addToSyncQueue(String operation, String payload) async {
-    final db = await database;
-    return await db.insert('sync_queue', {
-      'operation': operation,
-      'payload': payload,
-      'created_at': DateTime.now().toIso8601String(),
-      'retry_count': 0,
-    });
-  }
-
-  static Future<List<Map<String, dynamic>>> getSyncQueue() async {
-    final db = await database;
-    return await db.query('sync_queue', orderBy: 'created_at ASC');
-  }
-
-  static Future<void> removeFromSyncQueue(int id) async {
-    final db = await database;
-    await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
-  }
-
-  static Future<void> incrementSyncRetry(int id) async {
-    final db = await database;
-    await db.rawUpdate(
-      'UPDATE sync_queue SET retry_count = retry_count + 1 WHERE id = ?',
-      [id],
-    );
-  }
-
-  static Future<void> clearSyncQueue() async {
-    final db = await database;
-    await db.delete('sync_queue');
   }
 
   // ==================== پیشرفت مطالعه ====================
@@ -579,18 +528,20 @@ class DBHelper {
     required bool isCompleted,
   }) async {
     final db = await database;
-    await db.insert(
-      'reading_progress',
-      {
-        'user_id': userId,
-        'book_id': bookId,
-        'current_page': page,
-        'total_pages': totalPages,
-        'is_completed': isCompleted ? 1 : 0,
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      await db.insert(
+        'reading_progress',
+        {
+          'user_id': userId,
+          'book_id': bookId,
+          'current_page': page,
+          'total_pages': totalPages,
+          'is_completed': isCompleted ? 1 : 0,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
   }
 
   static Future<int?> getReadingProgress({
@@ -598,14 +549,18 @@ class DBHelper {
     required int bookId,
   }) async {
     final db = await database;
-    final rows = await db.query(
-      'reading_progress',
-      where: 'user_id = ? AND book_id = ?',
-      whereArgs: [userId, bookId],
-      limit: 1,
-    );
-    if (rows.isEmpty) return null;
-    return rows.first['current_page'] as int?;
+    try {
+      final rows = await db.query(
+        'reading_progress',
+        where: 'user_id = ? AND book_id = ?',
+        whereArgs: [userId, bookId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return rows.first['current_page'] as int?;
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<Map<String, dynamic>?> getReadingProgressFull({
@@ -613,25 +568,33 @@ class DBHelper {
     required int bookId,
   }) async {
     final db = await database;
-    final rows = await db.query(
-      'reading_progress',
-      where: 'user_id = ? AND book_id = ?',
-      whereArgs: [userId, bookId],
-      limit: 1,
-    );
-    if (rows.isEmpty) return null;
-    return Map<String, dynamic>.from(rows.first);
+    try {
+      final rows = await db.query(
+        'reading_progress',
+        where: 'user_id = ? AND book_id = ?',
+        whereArgs: [userId, bookId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return Map<String, dynamic>.from(rows.first);
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<List<Map<String, dynamic>>> getAllReadingProgress(
       int userId) async {
     final db = await database;
-    return await db.query(
-      'reading_progress',
-      where: 'user_id = ?',
-      whereArgs: [userId],
-      orderBy: 'updated_at DESC',
-    );
+    try {
+      return await db.query(
+        'reading_progress',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+        orderBy: 'updated_at DESC',
+      );
+    } catch (_) {
+      return [];
+    }
   }
 
   // ==================== نشانک‌ها ====================
@@ -643,13 +606,15 @@ class DBHelper {
     String? note,
   }) async {
     final db = await database;
-    await db.insert('bookmarks', {
-      'user_id': userId,
-      'book_id': bookId,
-      'page': page,
-      'note': note,
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    try {
+      await db.insert('bookmarks', {
+        'user_id': userId,
+        'book_id': bookId,
+        'page': page,
+        'note': note,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
   }
 
   static Future<List<Map<String, dynamic>>> getBookmarks({
@@ -657,17 +622,65 @@ class DBHelper {
     required int bookId,
   }) async {
     final db = await database;
-    return await db.query(
-      'bookmarks',
-      where: 'user_id = ? AND book_id = ?',
-      whereArgs: [userId, bookId],
-      orderBy: 'page ASC',
-    );
+    try {
+      return await db.query(
+        'bookmarks',
+        where: 'user_id = ? AND book_id = ?',
+        whereArgs: [userId, bookId],
+        orderBy: 'page ASC',
+      );
+    } catch (_) {
+      return [];
+    }
   }
 
-  static Future<void> deleteBookmark(int id) async {
+  // ==================== صف همگام‌سازی ====================
+
+  static Future<int> addToSyncQueue(String operation, String payload) async {
     final db = await database;
-    await db.delete('bookmarks', where: 'id = ?', whereArgs: [id]);
+    try {
+      return await db.insert('sync_queue', {
+        'operation': operation,
+        'payload': payload,
+        'created_at': DateTime.now().toIso8601String(),
+        'retry_count': 0,
+      });
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getSyncQueue() async {
+    final db = await database;
+    try {
+      return await db.query('sync_queue', orderBy: 'created_at ASC');
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> removeFromSyncQueue(int id) async {
+    final db = await database;
+    try {
+      await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
+    } catch (_) {}
+  }
+
+  static Future<void> incrementSyncRetry(int id) async {
+    final db = await database;
+    try {
+      await db.rawUpdate(
+        'UPDATE sync_queue SET retry_count = retry_count + 1 WHERE id = ?',
+        [id],
+      );
+    } catch (_) {}
+  }
+
+  static Future<void> clearSyncQueue() async {
+    final db = await database;
+    try {
+      await db.delete('sync_queue');
+    } catch (_) {}
   }
 
   // ==================== آمار کلی ====================
@@ -693,8 +706,16 @@ class DBHelper {
     await db.delete('user_activities');
     await db.delete('ratings');
     await db.delete('sync_queue');
+    await db.delete('achievements');
     await db.delete('reading_progress');
     await db.delete('bookmarks');
+  }
+
+  static Future<void> deleteDatabaseFile() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, _dbName);
+    await deleteDatabase(path);
+    _database = null;
   }
 
   static Future<void> close() async {
