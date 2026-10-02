@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.shahid_suleimani_library"
+    namespace = "com.example.soleimani_library"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.shahid_suleimani_library"
+        applicationId = "com.example.soleimani_library"
         minSdk = 21
         targetSdk = 36
         versionCode = 1
