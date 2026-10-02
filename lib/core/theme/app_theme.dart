@@ -1,257 +1,187 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// پالت‌های رنگی قابل انتخاب برای اپلیکیشن
-class AppThemeColors {
-  static const List<Map<String, dynamic>> colorSchemes = [
-    {
-      'name': 'سبز مقاومت',
-      'primary': Color(0xFF1B5E20),
-      'secondary': Color(0xFFFFD700),
-      'accent': Color(0xFFFFA000),
-      'darkBg': Color(0xFF0D1B0E),
-      'darkSurface': Color(0xFF1A2E1B),
-    },
-    {
-      'name': 'آبی آسمانی',
-      'primary': Color(0xFF0D47A1),
-      'secondary': Color(0xFF42A5F5),
-      'accent': Color(0xFF00BCD4),
-      'darkBg': Color(0xFF0A1929),
-      'darkSurface': Color(0xFF132F4C),
-    },
-    {
-      'name': 'بنفش شب',
-      'primary': Color(0xFF4A148C),
-      'secondary': Color(0xFFAB47BC),
-      'accent': Color(0xFF7C4DFF),
-      'darkBg': Color(0xFF1A0B2E),
-      'darkSurface': Color(0xFF2D1B4E),
-    },
-    {
-      'name': 'قرمز عاشورایی',
-      'primary': Color(0xFFB71C1C),
-      'secondary': Color(0xFFFF7043),
-      'accent': Color(0xFFFFAB40),
-      'darkBg': Color(0xFF2A0A0A),
-      'darkSurface': Color(0xFF3E1414),
-    },
-    {
-      'name': 'فیروزه‌ای',
-      'primary': Color(0xFF00695C),
-      'secondary': Color(0xFF26A69A),
-      'accent': Color(0xFF4DB6AC),
-      'darkBg': Color(0xFF04211E),
-      'darkSurface': Color(0xFF0E3A36),
-    },
+class AppThemes {
+  static const List<AppColorScheme> palettes = [
+    AppColorScheme(
+      name: 'سبز مقاومت',
+      primary: Color(0xFF1B5E20),
+      secondary: Color(0xFFFFD700),
+      accent: Color(0xFFFF6F00),
+      surface: Color(0xFFF1F8E9),
+      darkBg: Color(0xFF0A1A0B),
+    ),
+    AppColorScheme(
+      name: 'نیلی شب',
+      primary: Color(0xFF0D47A1),
+      secondary: Color(0xFF64B5F6),
+      accent: Color(0xFF00E5FF),
+      surface: Color(0xFFE3F2FD),
+      darkBg: Color(0xFF061423),
+    ),
+    AppColorScheme(
+      name: 'بنفش سلطنتی',
+      primary: Color(0xFF4A148C),
+      secondary: Color(0xFFBA68C8),
+      accent: Color(0xFFE040FB),
+      surface: Color(0xFFF3E5F5),
+      darkBg: Color(0xFF1A0B2E),
+    ),
+    AppColorScheme(
+      name: 'قرمز عاشورا',
+      primary: Color(0xFFB71C1C),
+      secondary: Color(0xFFFF8A65),
+      accent: Color(0xFFFFB300),
+      surface: Color(0xFFFFEBEE),
+      darkBg: Color(0xFF2A0A0A),
+    ),
+    AppColorScheme(
+      name: 'فیروزه شرقی',
+      primary: Color(0xFF00695C),
+      secondary: Color(0xFF4DB6AC),
+      accent: Color(0xFF1DE9B6),
+      surface: Color(0xFFE0F2F1),
+      darkBg: Color(0xFF04211E),
+    ),
+    AppColorScheme(
+      name: 'طلایی کویر',
+      primary: Color(0xFF8D6E63),
+      secondary: Color(0xFFFFCA28),
+      accent: Color(0xFFFF7043),
+      surface: Color(0xFFFBE9E7),
+      darkBg: Color(0xFF1C1410),
+    ),
   ];
-}
 
-/// تم اصلی اپلیکیشن - با پشتیبانی از رنگ پویا و حالت تاریک/روشن
-class AppTheme {
-  // رنگ‌های پایه پیش‌فرض
-  static const Color primaryGreen = Color(0xFF1B5E20);
-  static const Color primaryGold = Color(0xFFFFD700);
-  static const Color accentGold = Color(0xFFFFA000);
-  static const Color darkBackground = Color(0xFF0D1B0E);
-  static const Color darkSurface = Color(0xFF1A2E1B);
-  static const Color lightBackground = Color(0xFFF5F5F5);
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color textDark = Color(0xFF1A1A1A);
-  static const Color textLight = Color(0xFFEEEEEE);
-
-  /// ساخت تم پویا بر اساس رنگ انتخاب‌شده و روشنایی
-  static ThemeData getTheme({
-    required int colorIndex,
+  static ThemeData buildTheme({
+    required int paletteIndex,
     required Brightness brightness,
   }) {
-    final scheme = AppThemeColors.colorSchemes[colorIndex];
+    final p = palettes[paletteIndex];
     final isDark = brightness == Brightness.dark;
-    final primary = scheme['primary'] as Color;
-    final secondary = scheme['secondary'] as Color;
-    final accent = scheme['accent'] as Color;
-    final darkBg = scheme['darkBg'] as Color;
-    final darkSurface = scheme['darkSurface'] as Color;
 
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: primary,
+    final scheme = ColorScheme.fromSeed(
+      seedColor: p.primary,
       brightness: brightness,
     ).copyWith(
-      primary: primary,
-      secondary: secondary,
-      tertiary: accent,
-      surface: isDark ? darkSurface : lightSurface,
-      background: isDark ? darkBg : lightBackground,
-      onPrimary: Colors.white,
-      onSecondary: isDark ? Colors.black : textDark,
-      onSurface: isDark ? textLight : textDark,
-      onBackground: isDark ? textLight : textDark,
+      primary: isDark ? p.secondary : p.primary,
+      secondary: isDark ? p.accent : p.secondary,
+      tertiary: p.accent,
+      surface: isDark ? const Color(0xFF1A1A1A) : p.surface,
+      background: isDark ? p.darkBg : p.surface,
+      onPrimary: isDark ? Colors.black : Colors.white,
+      onSurface: isDark ? Colors.white : const Color(0xFF1A1A1A),
     );
 
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
-      colorScheme: colorScheme,
-      fontFamily: 'Vazirmatn',
-      scaffoldBackgroundColor: isDark ? darkBg : lightBackground,
-
-      // AppBar
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.background,
+      fontFamily: GoogleFonts.vazirmatn().fontFamily,
+      textTheme: GoogleFonts.vazirmatnTextTheme(
+        isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
+      ),
       appBarTheme: AppBarTheme(
-        backgroundColor: isDark ? darkSurface : primary,
-        foregroundColor: isDark ? secondary : Colors.white,
+        backgroundColor: Colors.transparent,
+        foregroundColor: scheme.onSurface,
         elevation: 0,
         centerTitle: true,
-        iconTheme: IconThemeData(
-          color: isDark ? secondary : Colors.white,
-        ),
-        titleTextStyle: TextStyle(
-          fontFamily: 'Vazirmatn',
-          fontSize: 18,
+        scrolledUnderElevation: 0,
+        titleTextStyle: GoogleFonts.vazirmatn(
+          fontSize: 20,
           fontWeight: FontWeight.bold,
-          color: isDark ? secondary : Colors.white,
+          color: scheme.onSurface,
         ),
       ),
-
-      // Card
       cardTheme: CardTheme(
-        color: isDark ? darkSurface : lightSurface,
-        elevation: 4,
-        shadowColor: primary.withOpacity(0.2),
+        color: isDark
+            ? Colors.white.withOpacity(0.06)
+            : Colors.white.withOpacity(0.85),
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: scheme.primary.withOpacity(0.1),
+            width: 1,
+          ),
         ),
         clipBehavior: Clip.antiAlias,
       ),
-
-      // Elevated Button
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: isDark ? secondary : primary,
-          foregroundColor: isDark ? Colors.black : Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(18),
           ),
-          elevation: 3,
-          textStyle: const TextStyle(
-            fontFamily: 'Vazirmatn',
-            fontWeight: FontWeight.bold,
+          elevation: 0,
+          textStyle: GoogleFonts.vazirmatn(
             fontSize: 15,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
-
-      // Outlined Button
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: isDark ? secondary : primary,
-          side: BorderSide(color: isDark ? secondary : primary, width: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-
-      // Text Button
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: isDark ? secondary : primary,
-        ),
-      ),
-
-      // Input
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isDark ? darkSurface : Colors.grey.shade100,
+        fillColor: isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.white.withOpacity(0.9),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(
-            color: primary.withOpacity(0.2),
+            color: scheme.primary.withOpacity(0.15),
+            width: 1.5,
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: secondary, width: 2),
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        labelStyle: TextStyle(
-          color: isDark ? textLight.withOpacity(0.7) : textDark.withOpacity(0.7),
-        ),
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       ),
-
-      // TabBar
-      tabBarTheme: TabBarTheme(
-        labelColor: isDark ? secondary : Colors.white,
-        unselectedLabelColor:
-            (isDark ? textLight : Colors.white).withOpacity(0.6),
-        indicatorColor: secondary,
-        indicatorSize: TabBarIndicatorSize.label,
-        labelStyle: const TextStyle(
-          fontFamily: 'Vazirmatn',
-          fontWeight: FontWeight.bold,
-          fontSize: 15,
-        ),
-      ),
-
-      // Chip
       chipTheme: ChipThemeData(
-        backgroundColor: isDark ? darkSurface : Colors.grey.shade200,
-        selectedColor: primary,
-        labelStyle: const TextStyle(fontFamily: 'Vazirmatn'),
+        backgroundColor:
+            isDark ? Colors.white.withOpacity(0.08) : Colors.white,
+        selectedColor: scheme.primary,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(30),
         ),
+        side: BorderSide(color: scheme.primary.withOpacity(0.2)),
+        labelStyle: GoogleFonts.vazirmatn(fontWeight: FontWeight.w600),
       ),
-
-      // SnackBar
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: isDark ? darkSurface : primary,
-        contentTextStyle: TextStyle(
-          fontFamily: 'Vazirmatn',
-          color: isDark ? textLight : Colors.white,
-        ),
+        backgroundColor: scheme.primary,
+        contentTextStyle: GoogleFonts.vazirmatn(color: scheme.onPrimary),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
-      ),
-
-      // Dialog
-      dialogTheme: DialogTheme(
-        backgroundColor: isDark ? darkSurface : lightSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-      ),
-
-      // Divider
-      dividerTheme: DividerThemeData(
-        color: (isDark ? textLight : textDark).withOpacity(0.1),
-        thickness: 1,
-      ),
-
-      // Icon
-      iconTheme: IconThemeData(
-        color: isDark ? textLight : textDark,
-      ),
-
-      // Progress
-      progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: isDark ? secondary : primary,
       ),
     );
   }
+}
 
-  /// تم روشن پیش‌فرض (برای سازگاری با کدهای قدیمی)
-  static final ThemeData lightTheme =
-      getTheme(colorIndex: 0, brightness: Brightness.light);
+class AppColorScheme {
+  final String name;
+  final Color primary;
+  final Color secondary;
+  final Color accent;
+  final Color surface;
+  final Color darkBg;
 
-  /// تم تاریک پیش‌فرض (برای سازگاری با کدهای قدیمی)
-  static final ThemeData darkTheme =
-      getTheme(colorIndex: 0, brightness: Brightness.dark);
+  const AppColorScheme({
+    required this.name,
+    required this.primary,
+    required this.secondary,
+    required this.accent,
+    required this.surface,
+    required this.darkBg,
+  });
 }

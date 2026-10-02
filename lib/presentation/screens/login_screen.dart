@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/database/db_helper.dart';
-import '../../data/models/user_model.dart';
 import '../../core/utils/national_code_validator.dart';
+import '../../core/widgets/animated_background.dart';
+import '../../data/models/user_model.dart';
 import '../../services/api_service.dart';
-import 'home_screen.dart';
+import '../widgets/dicebear_avatar.dart';
+import 'shell_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,19 +17,82 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _codeController = TextEditingController();
-  bool _isLoading = false;
+  final _nameCtrl = TextEditingController();
+  final _codeCtrl = TextEditingController();
+  final _nameFocus = FocusNode();
+  final _codeFocus = FocusNode();
+
+  late AnimationController _entryCtrl;
+  late AnimationController _shakeCtrl;
+  late AnimationController _avatarCtrl;
+
+  bool _loading = false;
   bool _obscureCode = false;
+  bool _showAvatar = false;
+  String _avatarSeed = '';
+  String _avatarStyle = 'adventurer';
 
+  @override
+  void initState() {
+    super.initState();
+
+    _entryCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _shakeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _avatarCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _nameCtrl.addListener(_onNameChanged);
+    _entryCtrl.forward();
+  }
+
+  void _onNameChanged() {
+    final text = _nameCtrl.text.trim();
+    final shouldShow = text.length >= 3;
+    if (shouldShow != _showAvatar) {
+      setState(() {
+        _showAvatar = shouldShow;
+        _avatarSeed = text;
+        if (shouldShow) _avatarCtrl.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.removeListener(_onNameChanged);
+    _nameCtrl.dispose();
+    _codeCtrl.dispose();
+    _nameFocus.dispose();
+    _codeFocus.dispose();
+    _entryCtrl.dispose();
+    _shakeCtrl.dispose();
+    _avatarCtrl.dispose();
+    super.dispose();
+  }
+
+  // ==================== ورود ====================
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
+    FocusScope.of(context).unfocus();
+    if (!_formKey.currentState!.validate()) {
+      _shakeCtrl.forward(from: 0);
+      return;
+    }
 
-    final name = _nameController.text.trim();
-    final code = _codeController.text.trim();
+    setState(() => _loading = true);
+
+    final name = _nameCtrl.text.trim();
+    final code = _codeCtrl.text.trim();
 
     try {
       // ۱. تلاش برای اتصال به سرور
@@ -39,24 +104,23 @@ class _LoginScreenState extends State<LoginScreen> {
       if (result['success'] == true) {
         final user = result['user'] as UserModel;
         await ApiService.setCurrentUser(user);
-        await _goToHome();
+        await _goToShell();
         return;
       }
 
-      // ۲. اگر سرور در دسترس نبود، از دیتابیس محلی استفاده کن
+      // ۲. حالت آفلاین
       if (result['offline'] == true) {
         final existing = await DBHelper.getUserByNationalCode(code);
         if (existing != null) {
           await ApiService.setCurrentUser(existing);
-          await _goToHome();
+          await _goToShell();
           return;
         } else {
-          // ثبت‌نام محلی
           final user = UserModel(
             name: name,
             nationalCode: code,
             avatarSeed: code,
-            avatarStyle: 'adventurer',
+            avatarStyle: _avatarStyle,
           );
           final id = await DBHelper.insertUser(user);
           final saved = UserModel(
@@ -64,67 +128,78 @@ class _LoginScreenState extends State<LoginScreen> {
             name: name,
             nationalCode: code,
             avatarSeed: code,
-            avatarStyle: 'adventurer',
+            avatarStyle: _avatarStyle,
           );
           await ApiService.setCurrentUser(saved);
-          await _goToHome();
+          await _goToShell();
           return;
         }
       }
 
-      // ۳. خطای دیگر
-      if (mounted) {
-        _showError(result['error'] ?? 'خطای نامشخص');
-      }
+      // ۳. خطا
+      _showError(result['error'] ?? 'خطای نامشخص');
+      _shakeCtrl.forward(from: 0);
     } catch (e) {
-      if (mounted) _showError('خطا: $e');
+      _showError('خطا در ورود: $e');
+      _shakeCtrl.forward(from: 0);
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _goToHome() async {
+  Future<void> _goToShell() async {
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-    );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red.shade700,
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 600),
+        pageBuilder: (_, __, ___) => const ShellScreen(),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.05),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          );
+        },
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _codeController.dispose();
-    super.dispose();
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(msg, style: GoogleFonts.vazirmatn()),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+    );
   }
 
+  // ==================== UI ====================
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              theme.colorScheme.primary,
-              theme.colorScheme.primary.withOpacity(0.7),
-              theme.colorScheme.background,
-            ],
-            stops: const [0.0, 0.4, 0.8],
-          ),
-        ),
+      body: AnimatedBackground(
+        blobCount: 6,
+        intensity: 1.2,
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -134,152 +209,371 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // ==================== لوگو ====================
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 2,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.library_books,
-                        size: 70,
-                        color: Colors.white,
-                      ),
-                    )
-                        .animate()
-                        .fadeIn(duration: 800.ms)
-                        .scale(delay: 200.ms, duration: 600.ms),
-
+                    _buildHeader(scheme),
+                    const SizedBox(height: 36),
+                    _buildForm(scheme),
                     const SizedBox(height: 24),
-
-                    // ==================== عنوان ====================
-                    Text(
-                      'کتابخانه شهید حاج قاسم سلیمانی',
-                      style: GoogleFonts.vazirmatn(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                    )
-                        .animate()
-                        .fadeIn(delay: 400.ms, duration: 600.ms)
-                        .slideY(begin: 0.3, end: 0),
-
-                    const SizedBox(height: 8),
-
-                    Text(
-                      'لطفاً برای ورود اطلاعات خود را وارد کنید',
-                      style: GoogleFonts.vazirmatn(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.85),
-                      ),
-                    ).animate().fadeIn(delay: 600.ms, duration: 600.ms),
-
-                    const SizedBox(height: 40),
-
-                    // ==================== فرم ====================
-                    Card(
-                      elevation: 8,
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          children: [
-                            TextFormField(
-                              controller: _nameController,
-                              textInputAction: TextInputAction.next,
-                              decoration: const InputDecoration(
-                                labelText: 'نام و نام خانوادگی',
-                                prefixIcon: Icon(Icons.person_outline),
-                              ),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) {
-                                  return 'نام را وارد کنید';
-                                }
-                                if (v.trim().length < 3) {
-                                  return 'نام باید حداقل ۳ حرف باشد';
-                                }
-                                return null;
-                              },
-                            )
-                                .animate()
-                                .fadeIn(delay: 800.ms)
-                                .slideX(begin: -0.2, end: 0),
-
-                            const SizedBox(height: 16),
-
-                            TextFormField(
-                              controller: _codeController,
-                              keyboardType: TextInputType.number,
-                              maxLength: 10,
-                              obscureText: _obscureCode,
-                              decoration: InputDecoration(
-                                labelText: 'کد ملی',
-                                prefixIcon: const Icon(Icons.badge_outlined),
-                                counterText: '',
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _obscureCode
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                  ),
-                                  onPressed: () {
-                                    setState(
-                                      () => _obscureCode = !_obscureCode,
-                                    );
-                                  },
-                                ),
-                              ),
-                              validator: (v) =>
-                                  NationalCodeValidator.validate(v),
-                            )
-                                .animate()
-                                .fadeIn(delay: 1000.ms)
-                                .slideX(begin: -0.2, end: 0),
-
-                            const SizedBox(height: 24),
-
-                            SizedBox(
-                              width: double.infinity,
-                              height: 52,
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _login,
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : const Text(
-                                        'ورود به کتابخانه',
-                                        style: TextStyle(fontSize: 16),
-                                      ),
-                              ),
-                            )
-                                .animate()
-                                .fadeIn(delay: 1200.ms)
-                                .scale(),
-                          ],
-                        ),
-                      ),
-                    )
-                        .animate()
-                        .fadeIn(delay: 700.ms, duration: 600.ms)
-                        .slideY(begin: 0.2, end: 0),
+                    _buildLoginButton(scheme),
+                    const SizedBox(height: 20),
+                    _buildFooter(scheme),
                   ],
                 ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ==================== هدر با انیمیشن ====================
+  Widget _buildHeader(ColorScheme scheme) {
+    return Column(
+      children: [
+        // لوگو با انیمیشن ورود
+        ScaleTransition(
+          scale: CurvedAnimation(
+            parent: _entryCtrl,
+            curve: const Interval(0.0, 0.5, curve: Curves.elasticOut),
+          ),
+          child: FadeTransition(
+            opacity: CurvedAnimation(
+              parent: _entryCtrl,
+              curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                  colors: [
+                    scheme.primary,
+                    scheme.primary.withOpacity(0.7),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: scheme.primary.withOpacity(0.4),
+                    blurRadius: 32,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.menu_book_rounded,
+                size: 56,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // عنوان
+        FadeTransition(
+          opacity: CurvedAnimation(
+            parent: _entryCtrl,
+            curve: const Interval(0.3, 0.7, curve: Curves.easeOut),
+          ),
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.3),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: _entryCtrl,
+              curve: const Interval(0.3, 0.7, curve: Curves.easeOutCubic),
+            )),
+            child: Text(
+              'خوش آمدید',
+              style: GoogleFonts.vazirmatn(
+                fontSize: 30,
+                fontWeight: FontWeight.w900,
+                color: scheme.onBackground,
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        FadeTransition(
+          opacity: CurvedAnimation(
+            parent: _entryCtrl,
+            curve: const Interval(0.5, 0.9, curve: Curves.easeOut),
+          ),
+          child: Text(
+            'برای ورود، اطلاعات خود را وارد کنید',
+            style: GoogleFonts.vazirmatn(
+              fontSize: 14,
+              color: scheme.onBackground.withOpacity(0.6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==================== فرم ====================
+  Widget _buildForm(ColorScheme scheme) {
+    return AnimatedBuilder(
+      animation: _shakeCtrl,
+      builder: (context, child) {
+        final shake = _shakeCtrl.value == 0
+            ? 0.0
+            : (1 - _shakeCtrl.value) *
+                10 *
+                ((_shakeCtrl.value * 4).floor().isEven ? 1 : -1);
+        return Transform.translate(
+          offset: Offset(shake, 0),
+          child: child,
+        );
+      },
+      child: FadeTransition(
+        opacity: CurvedAnimation(
+          parent: _entryCtrl,
+          curve: const Interval(0.4, 0.8, curve: Curves.easeOut),
+        ),
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.3),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: _entryCtrl,
+            curve: const Interval(0.4, 0.8, curve: Curves.easeOutCubic),
+          )),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: scheme.primary.withOpacity(0.1),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+              border: Border.all(
+                color: scheme.primary.withOpacity(0.08),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              children: [
+                // ==================== آواتار زنده ====================
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutCubic,
+                  child: _showAvatar
+                      ? Column(
+                          children: [
+                            ScaleTransition(
+                              scale: CurvedAnimation(
+                                parent: _avatarCtrl,
+                                curve: Curves.elasticOut,
+                              ),
+                              child: DiceBearAvatar(
+                                seed: _avatarSeed,
+                                style: _avatarStyle,
+                                size: 90,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'آواتار شما',
+                              style: GoogleFonts.vazirmatn(
+                                fontSize: 12,
+                                color:
+                                    scheme.onSurface.withOpacity(0.55),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+
+                // ==================== نام ====================
+                TextFormField(
+                  controller: _nameCtrl,
+                  focusNode: _nameFocus,
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) =>
+                      FocusScope.of(context).requestFocus(_codeFocus),
+                  decoration: InputDecoration(
+                    labelText: 'نام و نام خانوادگی',
+                    hintText: 'مثلاً: علی محمدی',
+                    prefixIcon: Icon(
+                      Icons.person_outline_rounded,
+                      color: scheme.primary,
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'نام را وارد کنید';
+                    }
+                    if (v.trim().length < 3) {
+                      return 'نام باید حداقل ۳ حرف باشد';
+                    }
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ==================== کد ملی ====================
+                TextFormField(
+                  controller: _codeCtrl,
+                  focusNode: _codeFocus,
+                  keyboardType: TextInputType.number,
+                  maxLength: 10,
+                  obscureText: _obscureCode,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'کد ملی',
+                    hintText: '۱۰ رقم',
+                    counterText: '',
+                    prefixIcon: Icon(
+                      Icons.badge_outlined,
+                      color: scheme.primary,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureCode
+                            ? Icons.visibility_rounded
+                            : Icons.visibility_off_rounded,
+                        color: scheme.onSurface.withOpacity(0.5),
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscureCode = !_obscureCode),
+                    ),
+                  ),
+                  validator: (v) => NationalCodeValidator.validate(v),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ==================== دکمه ورود ====================
+  Widget _buildLoginButton(ColorScheme scheme) {
+    return FadeTransition(
+      opacity: CurvedAnimation(
+        parent: _entryCtrl,
+        curve: const Interval(0.6, 1.0, curve: Curves.easeOut),
+      ),
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.3),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: _entryCtrl,
+          curve: const Interval(0.6, 1.0, curve: Curves.easeOutCubic),
+        )),
+        child: SizedBox(
+          width: double.infinity,
+          height: 58,
+          child: ElevatedButton(
+            onPressed: _loading ? null : _login,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: scheme.primary,
+              foregroundColor: scheme.onPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              elevation: 0,
+              shadowColor: scheme.primary.withOpacity(0.5),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _loading
+                  ? const SizedBox(
+                      key: ValueKey('loading'),
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Row(
+                      key: const ValueKey('text'),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'ورود به کتابخانه',
+                          style: GoogleFonts.vazirmatn(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 22,
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ==================== فوتر ====================
+  Widget _buildFooter(ColorScheme scheme) {
+    return FadeTransition(
+      opacity: CurvedAnimation(
+        parent: _entryCtrl,
+        curve: const Interval(0.8, 1.0, curve: Curves.easeOut),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: scheme.primary.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.shield_outlined,
+                  size: 16,
+                  color: scheme.primary.withOpacity(0.7),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'اطلاعات شما امن ذخیره می‌شود',
+                  style: GoogleFonts.vazirmatn(
+                    fontSize: 12,
+                    color: scheme.onBackground.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'کتابخانه شهید حاج قاسم سلیمانی',
+            style: GoogleFonts.vazirmatn(
+              fontSize: 11,
+              color: scheme.onBackground.withOpacity(0.4),
+            ),
+          ),
+        ],
       ),
     );
   }

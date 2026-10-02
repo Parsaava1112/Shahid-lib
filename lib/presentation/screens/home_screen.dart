@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'package:animations/animations.dart';
-import 'package:provider/provider.dart';
-
-import '../../core/theme/theme_controller.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../core/database/db_helper.dart';
+import '../../core/services/achievement_service.dart';
+import '../../core/widgets/animated_background.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/user_model.dart';
-import '../widgets/avatar_widget.dart';
+import '../../services/api_service.dart';
+import '../widgets/dicebear_avatar.dart';
 import 'book_detail_screen.dart';
-import 'profile_screen.dart';
-import 'settings_screen.dart';
-import 'leaderboard_screen.dart';
+import 'pdf_reader_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,81 +17,55 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
-  // داده‌ها
+class _HomeScreenState extends State<HomeScreen> {
   List<BookModel> _books = [];
-  List<BookModel> _filteredBooks = [];
-  UserModel? _currentUser;
-  String _aiMessage = '';
-
-  // دسته‌بندی
-  final List<String> _categories = [
-    'همه',
-    'کتاب',
-    'کتاب صوتی',
-    'پادکست تصویری',
-  ];
-  String _selectedCategory = 'همه';
-
-  // Tab
-  late TabController _tabController;
+  List<BookModel> _filtered = [];
+  UserModel? _user;
+  Map<String, dynamic> _stats = {};
   bool _loading = true;
+  String _category = 'همه';
+  final _categories = ['همه', 'کتاب', 'کتاب صوتی', 'پادکست تصویری'];
+  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _loadData();
+    _load();
   }
 
-  Future<void> _loadData() async {
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
     setState(() => _loading = true);
-    try {
-      // بارگذاری کتاب‌ها
-      var books = await DBHelper.getAllBooks();
-      if (books.isEmpty) {
-        await _seedSampleData();
-        books = await DBHelper.getAllBooks();
-      }
+    await AchievementService.initialize();
 
-      // بارگذاری کاربر جاری (اولین کاربر در دیتابیس)
-      final users = await DBHelper.getAllUsers();
-      UserModel? user = users.isNotEmpty ? users.first : null;
-
-      // پیام انگیزشی محلی
-      final message = _generateLocalMotivationalMessage(user);
-
-      if (!mounted) return;
-      setState(() {
-        _books = books;
-        _filteredBooks = books;
-        _currentUser = user;
-        _aiMessage = message;
-        _loading = false;
-      });
-    } catch (e) {
-      debugPrint('Error loading data: $e');
-      if (mounted) setState(() => _loading = false);
+    var books = await DBHelper.getAllBooks();
+    if (books.isEmpty) {
+      await _seed();
+      books = await DBHelper.getAllBooks();
     }
+
+    final user = await ApiService.getCurrentUser();
+    Map<String, dynamic> stats = {};
+    if (user?.id != null) {
+      stats = await DBHelper.getUserStats(user!.id!);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _books = books;
+      _filtered = books;
+      _user = user;
+      _stats = stats;
+      _loading = false;
+    });
   }
 
-  /// تولید پیام انگیزشی محلی (بدون نیاز به بک‌اند)
-  String _generateLocalMotivationalMessage(UserModel? user) {
-    final name = user?.name ?? 'کاربر عزیز';
-    final messages = [
-      '$name جان، امروز یه کتاب خوب بخون. حتی ۱۰ دقیقه کافیه.',
-      'شهید سلیمانی می‌فرمود: «هرچه داریم از کتاب و مطالعه است.» $name جان.',
-      '$name عزیز، کتاب بهترین دوستیه که هیچ‌وقت تنهات نمی‌ذاره.',
-      'با هر صفحه‌ای که می‌خونی، یه پله بالاتر می‌ری $name جان.',
-      '$name جان، دانش سلاح امروزه. با کتاب مسلح شو.',
-    ];
-    messages.shuffle();
-    return messages.first;
-  }
-
-  /// داده‌های نمونه برای تست اولیه
-  Future<void> _seedSampleData() async {
+  Future<void> _seed() async {
     final samples = [
       BookModel(
         title: 'خاطرات شهید سلیمانی',
@@ -102,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen>
         description:
             'مجموعه‌ای از خاطرات، زندگی‌نامه و درس‌های شهید حاج قاسم سلیمانی',
         coverUrl: '',
-        fileUrl: 'https://example.com/book1.pdf',
+        fileUrl: 'https://www.africau.edu/images/default/sample.pdf',
         filePath: '',
         type: 'pdf',
         category: 'کتاب',
@@ -110,601 +81,557 @@ class _HomeScreenState extends State<HomeScreen>
         ratingCount: 120,
       ),
       BookModel(
-        title: 'کتاب صوتی مالک اشتر',
+        title: 'مالک اشتر',
         author: 'راوی: علی محمدی',
         description: 'روایت زندگی مالک اشتر، یار باوفای امیرالمؤمنین',
         coverUrl: '',
-        fileUrl: 'https://example.com/audio1.mp3',
+        fileUrl: 'https://www.africau.edu/images/default/sample.pdf',
         filePath: '',
-        type: 'audio',
-        category: 'کتاب صوتی',
+        type: 'pdf',
+        category: 'کتاب',
         rating: 4.5,
         ratingCount: 85,
       ),
       BookModel(
-        title: 'پادکست تصویری سردار دل‌ها',
-        author: 'گروه رسانه',
-        description: 'مستند تصویری از زندگی و مجاهدت شهید سلیمانی',
-        coverUrl: '',
-        fileUrl: 'https://example.com/video1.mp4',
-        filePath: '',
-        type: 'video',
-        category: 'پادکست تصویری',
-        rating: 4.9,
-        ratingCount: 200,
-      ),
-      BookModel(
         title: 'از چیزی نمی‌ترسم',
         author: 'محمود فروتن',
-        description: 'روایت‌های کمتر شنیده شده از شهید حاج قاسم سلیمانی',
+        description: 'روایت‌های کمتر شنیده شده از شهید سلیمانی',
         coverUrl: '',
-        fileUrl: 'https://example.com/book2.pdf',
+        fileUrl: 'https://www.africau.edu/images/default/sample.pdf',
         filePath: '',
         type: 'pdf',
         category: 'کتاب',
         rating: 4.7,
         ratingCount: 95,
       ),
-      BookModel(
-        title: 'کتاب صوتی مکتب سلیمانی',
-        author: 'راوی: حسن رضایی',
-        description: 'بررسی ابعاد مختلف مکتب شهید سلیمانی',
-        coverUrl: '',
-        fileUrl: 'https://example.com/audio2.mp3',
-        filePath: '',
-        type: 'audio',
-        category: 'کتاب صوتی',
-        rating: 4.6,
-        ratingCount: 60,
-      ),
-      BookModel(
-        title: 'پادکست تصویری روایت فتح',
-        author: 'گروه مستند',
-        description: 'مجموعه مستندهای روایت فتح با روایت سردار سلیمانی',
-        coverUrl: '',
-        fileUrl: 'https://example.com/video2.mp4',
-        filePath: '',
-        type: 'video',
-        category: 'پادکست تصویری',
-        rating: 4.4,
-        ratingCount: 45,
-      ),
     ];
-    for (final book in samples) {
-      await DBHelper.insertBook(book);
+    for (final b in samples) {
+      await DBHelper.insertBook(b);
     }
   }
 
-  /// فیلتر کتاب‌ها
-  void _filterBooks(String category) {
+  void _filter(String cat) {
     setState(() {
-      _selectedCategory = category;
-      if (category == 'همه') {
-        _filteredBooks = _books;
-      } else {
-        final type = _getTypeFromCategory(category);
-        _filteredBooks = _books.where((b) => b.type == type).toList();
-      }
+      _category = cat;
+      final q = _searchCtrl.text.trim().toLowerCase();
+      _filtered = _books.where((b) {
+        final matchCat = cat == 'همه' ||
+            (cat == 'کتاب' && b.type == 'pdf') ||
+            (cat == 'کتاب صوتی' && b.type == 'audio') ||
+            (cat == 'پادکست تصویری' && b.type == 'video');
+        final matchQ = q.isEmpty ||
+            b.title.toLowerCase().contains(q) ||
+            b.author.toLowerCase().contains(q);
+        return matchCat && matchQ;
+      }).toList();
     });
-  }
-
-  String _getTypeFromCategory(String category) {
-    switch (category) {
-      case 'کتاب':
-        return 'pdf';
-      case 'کتاب صوتی':
-        return 'audio';
-      case 'پادکست تصویری':
-        return 'video';
-      default:
-        return 'pdf';
-    }
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final themeController = context.watch<ThemeController>();
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('کتابخانه شهید سلیمانی'),
-        actions: [
-          IconButton(
-            tooltip: 'تنظیمات',
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SettingsScreen(),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'پروفایل',
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ProfileScreen(),
-                ),
-              );
-            },
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'کتاب‌ها'),
-            Tab(text: 'صوتی'),
-            Tab(text: 'تصویری'),
-          ],
-          onTap: (index) {
-            final categories = ['کتاب', 'کتاب صوتی', 'پادکست تصویری'];
-            _filterBooks(categories[index]);
-          },
-        ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: CustomScrollView(
-                slivers: [
-                  // پیام انگیزشی AI
-                  SliverToBoxAdapter(
-                    child: _buildAiMessageBanner(theme),
-                  ),
-
-                  // لیدربورد (کارت کوچک)
-                  SliverToBoxAdapter(
-                    child: _buildLeaderboardShortcut(theme),
-                  ),
-
-                  // دسته‌بندی‌ها
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 60,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _categories.length,
-                        itemBuilder: (context, index) {
-                          final category = _categories[index];
-                          final isSelected = _selectedCategory == category;
-                          return Padding(
-                            padding: const EdgeInsets.only(
-                              left: 8,
-                              top: 8,
-                              bottom: 8,
-                            ),
-                            child: FilterChip(
-                              label: Text(category),
-                              selected: isSelected,
-                              onSelected: (_) => _filterBooks(category),
-                              selectedColor: theme.colorScheme.primary,
-                              checkmarkColor: Colors.white,
-                              labelStyle: TextStyle(
-                                color: isSelected
-                                    ? Colors.white
-                                    : theme.colorScheme.onSurface,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
+    return AnimatedBackground(
+      blobCount: 5,
+      intensity: 0.6,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildHeader(scheme)),
+                    SliverToBoxAdapter(child: _buildStatsRow(scheme)),
+                    SliverToBoxAdapter(child: _buildSearch(scheme)),
+                    SliverToBoxAdapter(child: _buildCategories(scheme)),
+                    SliverToBoxAdapter(child: _buildSectionTitle(scheme)),
+                    _filtered.isEmpty
+                        ? SliverFillRemaining(child: _buildEmpty(scheme))
+                        : SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                            sliver: SliverGrid(
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                childAspectRatio: 0.62,
+                              ),
+                              delegate: SliverChildBuilderDelegate(
+                                (_, i) => _BookCard(
+                                  book: _filtered[i],
+                                  index: i,
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => BookDetailScreen(
+                                        book: _filtered[i],
+                                      ),
+                                    ),
+                                  ),
+                                  onRead: () => _openBook(_filtered[i]),
+                                ),
+                                childCount: _filtered.length,
                               ),
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-
-                  // لیست کتاب‌ها
-                  _filteredBooks.isEmpty
-                      ? SliverFillRemaining(
-                          child: _buildEmptyState(theme),
-                        )
-                      : SliverPadding(
-                          padding: const EdgeInsets.all(16),
-                          sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final book = _filteredBooks[index];
-                                return OpenContainer(
-                                  transitionType:
-                                      ContainerTransitionType.fadeThrough,
-                                  transitionDuration:
-                                      const Duration(milliseconds: 500),
-                                  closedElevation: 0,
-                                  closedColor: Colors.transparent,
-                                  openColor: theme.colorScheme.background,
-                                  middleColor: theme.colorScheme.background,
-                                  openBuilder: (context, _) =>
-                                      BookDetailScreen(book: book),
-                                  closedBuilder:
-                                      (context, openContainer) =>
-                                          _AnimatedBookCard(
-                                    book: book,
-                                    index: index,
-                                    onTap: openContainer,
-                                  ),
-                                );
-                              },
-                              childCount: _filteredBooks.length,
-                            ),
                           ),
-                        ),
-                ],
-              ),
-            ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _loadData,
-        icon: const Icon(Icons.refresh),
-        label: const Text('بروزرسانی'),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: Colors.white,
+                  ],
+                ),
+        ),
       ),
     );
   }
 
-  /// بنر پیام انگیزشی AI
-  Widget _buildAiMessageBanner(ThemeData theme) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.primary,
-            theme.colorScheme.primary.withOpacity(0.7),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+  Widget _buildHeader(ColorScheme scheme) {
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'صبح بخیر'
+        : hour < 18
+            ? 'ظهر بخیر'
+            : 'شب بخیر';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.auto_awesome,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'پیام امروز',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                Text(
+                  greeting,
+                  style: GoogleFonts.vazirmatn(
+                    fontSize: 14,
+                    color: scheme.onSurface.withOpacity(0.6),
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _aiMessage,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
+                  _user?.name ?? 'کاربر عزیز',
+                  style: GoogleFonts.vazirmatn(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.onSurface,
                   ),
                 ),
               ],
             ),
           ),
+          if (_user != null)
+            DiceBearAvatar(
+              seed: _user!.avatarSeed ?? _user!.nationalCode,
+              style: _user!.avatarStyle ?? 'adventurer',
+              size: 54,
+            ),
         ],
       ),
-    )
-        .animate()
-        .fadeIn(duration: 600.ms)
-        .slideY(begin: -0.2, end: 0, curve: Curves.easeOut);
-  }
-
-  /// کارت میانبر لیدربورد
-  Widget _buildLeaderboardShortcut(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Card(
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor:
-                theme.colorScheme.secondary.withOpacity(0.2),
-            child: Icon(
-              Icons.emoji_events,
-              color: theme.colorScheme.secondary,
-            ),
-          ),
-          title: const Text(
-            'جدول امتیازات',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          subtitle: const Text('رتبه خود را در بین کتاب‌خوان‌ها ببینید'),
-          trailing: const Icon(Icons.arrow_back_ios, size: 16),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const LeaderboardScreen(),
-              ),
-            );
-          },
-        ),
-      )
-          .animate()
-          .fadeIn(delay: 200.ms, duration: 500.ms)
-          .slideX(begin: 0.1, end: 0),
     );
   }
 
-  /// حالت خالی
-  Widget _buildEmptyState(ThemeData theme) {
+  Widget _buildStatsRow(ColorScheme scheme) {
+    final xp = _stats['total_xp'] as int? ?? 0;
+    final level = _stats['level'] as int? ?? 1;
+    final streak = _stats['current_streak'] as int? ?? 0;
+    final minutes = _stats['total_minutes'] as int? ?? 0;
+    final xpInLevel = AchievementService.xpInCurrentLevel(xp);
+    final xpNeeded = AchievementService.xpForNextLevel(level);
+    final progress = xpNeeded == 0 ? 0.0 : (xpInLevel / xpNeeded).clamp(0, 1);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              scheme.primary,
+              scheme.primary.withOpacity(0.75),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withOpacity(0.25),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                _statChip('سطح $level', Icons.military_tech, Colors.white),
+                const SizedBox(width: 8),
+                _statChip('$xp XP', Icons.bolt, Colors.amber),
+                const Spacer(),
+                _statChip('$streak روز', Icons.local_fire_department,
+                    Colors.orangeAccent),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 8,
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      valueColor: const AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '$xpInLevel/$xpNeeded',
+                  style: GoogleFonts.vazirmatn(
+                    fontSize: 12,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$minutes دقیقه مطالعه',
+              style: GoogleFonts.vazirmatn(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.85),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statChip(String text, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: GoogleFonts.vazirmatn(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearch(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (_) => _filter(_category),
+        decoration: InputDecoration(
+          hintText: 'جستجو در کتاب‌ها...',
+          prefixIcon: Icon(Icons.search_rounded, color: scheme.primary),
+          suffixIcon: _searchCtrl.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    _filter(_category);
+                  },
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategories(ColorScheme scheme) {
+    return SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        itemCount: _categories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final c = _categories[i];
+          final active = c == _category;
+          return GestureDetector(
+            onTap: () => _filter(c),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              decoration: BoxDecoration(
+                color: active
+                    ? scheme.primary
+                    : scheme.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: scheme.primary.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Text(
+                c,
+                style: GoogleFonts.vazirmatn(
+                  color: active ? scheme.onPrimary : scheme.primary,
+                  fontWeight: active ? FontWeight.bold : FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 20,
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'کتاب‌های موجود',
+            style: GoogleFonts.vazirmatn(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: scheme.onSurface,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            '${_filtered.length} کتاب',
+            style: GoogleFonts.vazirmatn(
+              fontSize: 13,
+              color: scheme.onSurface.withOpacity(0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmpty(ColorScheme scheme) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.menu_book,
-            size: 100,
-            color: theme.colorScheme.primary.withOpacity(0.3),
-          ),
+          Icon(Icons.menu_book_outlined,
+              size: 100, color: scheme.primary.withOpacity(0.3)),
           const SizedBox(height: 16),
           Text(
-            'کتابی یافت نشد',
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: theme.colorScheme.onBackground.withOpacity(0.6),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'برای بروزرسانی دکمه پایین را بزنید',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onBackground.withOpacity(0.4),
+            'کتابی پیدا نشد',
+            style: GoogleFonts.vazirmatn(
+              fontSize: 16,
+              color: scheme.onSurface.withOpacity(0.6),
             ),
           ),
         ],
-      ).animate().fadeIn(duration: 500.ms),
+      ),
+    );
+  }
+
+  void _openBook(BookModel book) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PdfReaderScreen(book: book)),
     );
   }
 }
 
-/// کارت کتاب با Hero Animation
-class _AnimatedBookCard extends StatelessWidget {
+class _BookCard extends StatelessWidget {
   final BookModel book;
   final int index;
   final VoidCallback onTap;
+  final VoidCallback onRead;
 
-  const _AnimatedBookCard({
+  const _BookCard({
     required this.book,
     required this.index,
     required this.onTap,
+    required this.onRead,
   });
-
-  IconData _getBookIcon() {
-    switch (book.type) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'audio':
-        return Icons.headphones;
-      case 'video':
-        return Icons.videocam;
-      default:
-        return Icons.book;
-    }
-  }
-
-  Color _getTypeColor(ThemeData theme) {
-    switch (book.type) {
-      case 'pdf':
-        return theme.colorScheme.primary;
-      case 'audio':
-        return Colors.orange;
-      case 'video':
-        return Colors.redAccent;
-      default:
-        return theme.colorScheme.primary;
-    }
-  }
-
-  String _getTypeLabel() {
-    switch (book.type) {
-      case 'pdf':
-        return 'کتاب';
-      case 'audio':
-        return 'صوتی';
-      case 'video':
-        return 'تصویری';
-      default:
-        return '';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final typeColor = _getTypeColor(theme);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: InkWell(
+    final scheme = Theme.of(context).colorScheme;
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 400 + index * 60),
+      curve: Curves.easeOutCubic,
+      tween: Tween(begin: 0, end: 1),
+      builder: (context, v, child) {
+        return Transform.translate(
+          offset: Offset(0, 30 * (1 - v)),
+          child: Opacity(opacity: v, child: child),
+        );
+      },
+      child: GestureDetector(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: scheme.surface,
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withOpacity(0.1),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // کاور کتاب با Hero
-              Hero(
-                tag: 'book_cover_${book.id}',
-                child: Container(
-                  width: 80,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: LinearGradient(
-                      colors: [
-                        typeColor.withOpacity(0.2),
-                        typeColor.withOpacity(0.05),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    border: Border.all(
-                      color: typeColor.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Icon(
-                          _getBookIcon(),
-                          size: 40,
-                          color: typeColor,
-                        ),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(20)),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          scheme.primary.withOpacity(0.85),
+                          scheme.primary.withOpacity(0.6),
+                        ],
                       ),
-                      Positioned(
-                        top: 4,
-                        right: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
+                    ),
+                    child: Stack(
+                      children: [
+                        Center(
+                          child: Icon(
+                            book.type == 'pdf'
+                                ? Icons.picture_as_pdf_rounded
+                                : book.type == 'audio'
+                                    ? Icons.headphones_rounded
+                                    : Icons.videocam_rounded,
+                            size: 60,
+                            color: Colors.white.withOpacity(0.9),
                           ),
-                          decoration: BoxDecoration(
-                            color: typeColor,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _getTypeLabel(),
-                            style: const TextStyle(
+                        ),
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
                               color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.star_rounded,
+                                    size: 12, color: Colors.amber),
+                                const SizedBox(width: 2),
+                                Text(
+                                  book.rating.toStringAsFixed(1),
+                                  style: GoogleFonts.vazirmatn(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
-
-              // اطلاعات کتاب
-              Expanded(
+              Padding(
+                padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       book.title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.vazirmatn(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        height: 1.3,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       book.author,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withOpacity(0.6),
-                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.vazirmatn(
+                        fontSize: 11,
+                        color: scheme.onSurface.withOpacity(0.6),
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.star,
-                          size: 16,
-                          color: Colors.amber,
+                    GestureDetector(
+                      onTap: onRead,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: scheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          book.rating.toStringAsFixed(1),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '(${book.ratingCount})',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withOpacity(0.5),
-                          ),
-                        ),
-                        const Spacer(),
-                        if (book.isDownloaded)
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary
-                                  .withOpacity(0.1),
-                              shape: BoxShape.circle,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.play_arrow_rounded,
+                                size: 16, color: scheme.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              'مطالعه',
+                              style: GoogleFonts.vazirmatn(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: scheme.primary,
+                              ),
                             ),
-                            child: Icon(
-                              Icons.download_done,
-                              size: 16,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                      ],
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
-              ),
-
-              // فلش
-              Icon(
-                Icons.arrow_back_ios,
-                size: 16,
-                color: theme.colorScheme.onSurface.withOpacity(0.3),
               ),
             ],
           ),
         ),
       ),
-    )
-        .animate()
-        .fadeIn(
-          delay: (80 * index).ms,
-          duration: 400.ms,
-        )
-        .slideX(
-          begin: 0.15,
-          end: 0,
-          curve: Curves.easeOut,
-          delay: (80 * index).ms,
-        );
+    );
   }
 }
