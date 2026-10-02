@@ -8,7 +8,6 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
     <!-- ==================== مجوزهای ذخیره‌سازی (برای دانلود کتاب) ==================== -->
-    <!-- برای اندروید ۱۲ و پایین‌تر -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -17,13 +16,11 @@
         android:maxSdkVersion="29"
         tools:ignore="ScopedStorage" />
 
-    <!-- برای اندروید ۱۳ و بالاتر -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
     <!-- ==================== مجوزهای نوتیفیکیشن ==================== -->
-    <!-- برای اندروید ۱۳ و بالاتر -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -45,7 +42,14 @@
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
-        android:enableOnBackInvokedCallback="true">
+        android:enableOnBackInvokedCallback="true"
+        android:hardwareAccelerated="true">
+
+        <!-- ==================== غیرفعال‌سازی Impeller برای دستگاه‌های قدیمی ==================== -->
+        <!-- این خط باعث می‌شود Flutter از Skia/OpenGL به‌جای Vulkan استفاده کند -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
 
         <!-- ==================== Activity اصلی ==================== -->
         <activity
@@ -95,18 +99,17 @@
             </intent-filter>
         </receiver>
 
-        <!-- ==================== تنظیمات Firebase Messaging (اختیاری) ==================== -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="shahid_library_channel" />
-
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@mipmap/ic_launcher" />
-
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_color"
-            android:resource="@color/notification_color" />
+        <!-- ==================== WorkManager (اختیاری) ==================== -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
 
     </application>
 
