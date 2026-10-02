@@ -42,49 +42,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # ==================== ۶. بررسی کد (اختیاری) ====================
-      - name: Analyze code
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-        continue-on-error: true
-
-      # ==================== ۷. اجرای تست‌ها (اختیاری) ====================
-      - name: Run tests
-        run: flutter test
-        continue-on-error: true
-
-      # ==================== ۸. ساخت APK ====================
-      - name: Build APK (release)
-        run: flutter build apk --release --split-per-abi
-
-      # ==================== ۹. ساخت APK کامل (بدون split) - اختیاری ====================
-      - name: Build universal APK
+      # ==================== ۷. ساخت APK واحد ====================
+      - name: Build single APK (release)
         run: flutter build apk --release
-        continue-on-error: true
 
-      # ==================== ۱۰. آپلود APKها ====================
-      - name: Upload APK artifacts (split)
+      # ==================== ۸. آپلود APK ====================
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-split
-          path: build/app/outputs/flutter-apk/app-*-release.apk
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Upload universal APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-universal
+          name: shahid-suleimani-library-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
-
-      # ==================== ۱۱. آپلود گزارش build در صورت خطا ====================
-      - name: Upload build logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            build/
-            android/.gradle/
-          retention-days: 7
