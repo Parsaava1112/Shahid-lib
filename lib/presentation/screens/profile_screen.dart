@@ -179,7 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
-                    value: progress,
+                    value: progress.toDouble(),
                     minHeight: 8,
                     backgroundColor: Colors.white.withOpacity(0.2),
                     valueColor:

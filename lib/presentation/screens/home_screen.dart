@@ -279,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: LinearProgressIndicator(
-                      value: progress,
+                      value: progress.toDouble(),
                       minHeight: 8,
                       backgroundColor: Colors.white.withOpacity(0.2),
                       valueColor: const AlwaysStoppedAnimation(Colors.white),
