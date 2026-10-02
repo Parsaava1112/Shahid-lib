@@ -208,7 +208,9 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   RatingWidget(
                     bookId: _book.id ?? 0,
                     initialRating: _book.rating,
-                    onRatingChanged: _checkDownloaded,
+                    onRatingChanged: (value) {
+                      _checkDownloaded();
+                    },
                   ),
                   const SizedBox(height: 40),
                 ],
