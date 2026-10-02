@@ -22,11 +22,12 @@ class AchievementModel {
   });
 
   /// فقط در حافظه - برای نمایش وضعیت باز شدن
-  bool get isUnlocked => _unlockedIds.contains(id);
-
   static final Set<String> _unlockedIds = {};
 
-  static void setUnlocked(Set<String> ids) {
+  bool get isUnlocked => _unlockedIds.contains(id);
+
+  /// پذیرش هر دو نوع List<String> و Set<String>
+  static void setUnlocked(Iterable<String> ids) {
     _unlockedIds
       ..clear()
       ..addAll(ids);
@@ -35,6 +36,12 @@ class AchievementModel {
   static void markUnlocked(String id) {
     _unlockedIds.add(id);
   }
+
+  static void clearUnlocked() {
+    _unlockedIds.clear();
+  }
+
+  static Set<String> get unlockedIds => Set.unmodifiable(_unlockedIds);
 
   Map<String, dynamic> toMap() => {
         'id': id,
