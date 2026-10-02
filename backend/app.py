@@ -34,26 +34,20 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# اتصال db به app
 db.init_app(app)
 
-# ساخت دیتابیس (با مدیریت race condition بین workerها)
 with app.app_context():
     try:
         db.create_all()
     except Exception as e:
-        # اگر جدول قبلاً ساخته شده، نادیده بگیر
-        if 'already exists' in str(e).lower():
-            pass
-        else:
+        if 'already exists' not in str(e).lower():
             raise
 
-# ==================== موتور AI ====================
 ai_engine = RuleBasedAIEngine()
 
 
 # ==================== پوشه‌های آپلود ====================
-for folder in ['books', 'audio', 'video']:
+for folder in ['books', 'audio', 'video', 'covers']:
     os.makedirs(os.path.join(UPLOAD_FOLDER, folder), exist_ok=True)
 
 
@@ -61,6 +55,11 @@ for folder in ['books', 'audio', 'video']:
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def allowed_image(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in {'jpg', 'jpeg', 'png', 'webp'}
 
 
 # ==================== ۱. سلامت سرور ====================
@@ -86,7 +85,6 @@ def login():
     user = User.query.filter_by(national_code=national_code).first()
 
     if user:
-        # به‌روزرسانی نام اگر تغییر کرده
         if user.name != name:
             user.name = name
             db.session.commit()
@@ -182,13 +180,15 @@ def get_book(book_id):
     return jsonify(book.to_dict()), 200
 
 
-# ==================== ۶. آپلود فایل ====================
+# ==================== ۶. آپلود کتاب + کاور ====================
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
         return jsonify({'error': 'فایلی ارسال نشده است'}), 400
 
     file = request.files['file']
+    cover = request.files.get('cover')  # اختیاری
+
     book_type = request.form.get('type', 'pdf')
     title = request.form.get('title')
     author = request.form.get('author', '')
@@ -204,7 +204,7 @@ def upload_file():
     if not allowed_file(file.filename):
         return jsonify({'error': 'فرمت فایل مجاز نیست'}), 400
 
-    # ذخیره فایل با نام امن
+    # ذخیره فایل اصلی
     original_name = secure_filename(file.filename)
     unique_name = f"{uuid.uuid4().hex}_{original_name}"
 
@@ -216,15 +216,28 @@ def upload_file():
 
     file_path = os.path.join(UPLOAD_FOLDER, subfolder, unique_name)
     file.save(file_path)
-
+    file_size = os.path.getsize(file_path)
     file_url = f"/api/download/{subfolder}/{unique_name}"
+
+    # ذخیره کاور (اختیاری)
+    cover_url = None
+    cover_path = None
+    if cover and cover.filename and allowed_image(cover.filename):
+        ext = cover.filename.rsplit('.', 1)[-1].lower()
+        cover_name = f"{uuid.uuid4().hex}.{ext}"
+        cover_path = os.path.join(UPLOAD_FOLDER, 'covers', cover_name)
+        cover.save(cover_path)
+        cover_url = f"/api/covers/{cover_name}"
 
     book = Book(
         title=title,
         author=author,
         description=description,
+        cover_url=cover_url,
+        cover_path=cover_path,
         file_url=file_url,
         file_path=file_path,
+        file_size=file_size,
         type=book_type,
         category=category,
     )
@@ -237,9 +250,44 @@ def upload_file():
     }), 201
 
 
+# ==================== ۷. آپلود کاور جداگانه ====================
+@app.route('/api/upload-cover', methods=['POST'])
+def upload_cover():
+    if 'cover' not in request.files:
+        return jsonify({'error': 'کاور ارسال نشده'}), 400
+
+    file = request.files['cover']
+    book_id = request.form.get('book_id')
+
+    if file.filename == '':
+        return jsonify({'error': 'نام فایل خالی'}), 400
+
+    if not allowed_image(file.filename):
+        return jsonify({'error': 'فرمت تصویر مجاز نیست'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower()
+    unique_name = f"{uuid.uuid4().hex}.{ext}"
+    cover_path = os.path.join(UPLOAD_FOLDER, 'covers', unique_name)
+    file.save(cover_path)
+
+    cover_url = f"/api/covers/{unique_name}"
+
+    if book_id:
+        book = Book.query.get(book_id)
+        if book:
+            book.cover_url = cover_url
+            book.cover_path = cover_path
+            db.session.commit()
+
+    return jsonify({
+        'message': 'کاور آپلود شد',
+        'cover_url': cover_url,
+    }), 201
+
+
+# ==================== ۸. دانلود فایل ====================
 @app.route('/api/download/<folder>/<filename>', methods=['GET'])
 def download_file(folder, filename):
-    # جلوگیری از path traversal
     safe_folder = os.path.basename(folder)
     safe_filename = os.path.basename(filename)
     file_path = os.path.join(UPLOAD_FOLDER, safe_folder, safe_filename)
@@ -250,7 +298,27 @@ def download_file(folder, filename):
     return send_file(file_path, as_attachment=True)
 
 
-# ==================== ۷. امتیازات ====================
+# ==================== ۹. سرو کردن کاور ====================
+@app.route('/api/covers/<filename>', methods=['GET'])
+def serve_cover(filename):
+    safe_name = os.path.basename(filename)
+    path = os.path.join(UPLOAD_FOLDER, 'covers', safe_name)
+
+    if not os.path.exists(path):
+        abort(404)
+
+    # تشخیص mimetype بر اساس پسوند
+    ext = safe_name.rsplit('.', 1)[-1].lower()
+    mimetype = 'image/jpeg'
+    if ext == 'png':
+        mimetype = 'image/png'
+    elif ext == 'webp':
+        mimetype = 'image/webp'
+
+    return send_file(path, mimetype=mimetype)
+
+
+# ==================== ۱۰. امتیازات ====================
 @app.route('/api/ratings', methods=['POST'])
 def add_rating():
     data = request.get_json(silent=True) or {}
@@ -278,7 +346,6 @@ def add_rating():
     db.session.add(rating)
     db.session.commit()
 
-    # بروزرسانی میانگین امتیاز
     book = Book.query.get(book_id)
     if book:
         ratings = Rating.query.filter_by(book_id=book_id).all()
@@ -303,7 +370,7 @@ def get_ratings(book_id):
     return jsonify([r.to_dict() for r in ratings]), 200
 
 
-# ==================== ۸. حلقه‌های مطالعه ====================
+# ==================== ۱۱. حلقه‌های مطالعه ====================
 @app.route('/api/circles', methods=['GET'])
 def get_circles():
     circles = ReadingCircle.query.all()
@@ -344,7 +411,6 @@ def create_circle():
     db.session.add(circle)
     db.session.commit()
 
-    # سازنده به‌عنوان عضو اضافه شود
     member = CircleMember(
         circle_id=circle.id,
         user_id=data['user_id'],
@@ -383,7 +449,7 @@ def join_circle(circle_id):
     return jsonify({'message': 'عضو شدید'}), 201
 
 
-# ==================== ۹. جدول امتیازات ====================
+# ==================== ۱۲. جدول امتیازات ====================
 @app.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
     period = request.args.get('period', 'weekly')
@@ -426,7 +492,7 @@ def get_leaderboard():
     return jsonify(leaderboard), 200
 
 
-# ==================== ۱۰. هوش مصنوعی ====================
+# ==================== ۱۳. هوش مصنوعی ====================
 @app.route('/api/ai/recommendations/<int:user_id>', methods=['GET'])
 def get_recommendations(user_id):
     user = User.query.get_or_404(user_id)
@@ -459,7 +525,6 @@ def get_user_stats(user_id):
 
 @app.route('/api/ai/activity', methods=['POST'])
 def record_activity():
-    """ثبت فعالیت کاربر برای محاسبه استریک و آمار"""
     data = request.get_json(silent=True) or {}
     user_id = data.get('user_id')
     book_id = data.get('book_id')
@@ -479,11 +544,9 @@ def record_activity():
     )
 
     if activity and activity.last_activity.date() == today:
-        # فعالیت امروز قبلاً ثبت شده
         activity.minutes_read = (activity.minutes_read or 0) + minutes
         activity.last_activity = datetime.utcnow()
     else:
-        # بررسی استریک
         streak = 1
         if activity and activity.last_activity.date() == (today - timedelta(days=1)):
             streak = (activity.current_streak or 1) + 1
@@ -504,3 +567,8 @@ def record_activity():
         'message': 'فعالیت ثبت شد',
         'streak': activity.current_streak,
     }), 201
+
+
+# ==================== اجرا ====================
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)

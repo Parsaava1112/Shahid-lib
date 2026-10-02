@@ -213,7 +213,7 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'نسخه ۱.۰.۰',
+                      'نسخه 2.0.0',
                       style: GoogleFonts.vazirmatn(
                         fontSize: 12,
                         color: scheme.onSurface.withOpacity(0.6),

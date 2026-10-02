@@ -36,10 +36,12 @@ class Book(db.Model):
     title = db.Column(db.String(200), nullable=False)
     author = db.Column(db.String(200))
     description = db.Column(db.Text)
-    cover_url = db.Column(db.String(500))
+    cover_url = db.Column(db.String(500))       # URL کاور
+    cover_path = db.Column(db.String(500))      # مسیر فیزیکی کاور
     file_url = db.Column(db.String(500))
     file_path = db.Column(db.String(500))
-    type = db.Column(db.String(20), nullable=False)  # pdf, audio, video
+    file_size = db.Column(db.Integer, default=0)  # حجم فایل به بایت
+    type = db.Column(db.String(20), nullable=False)
     category = db.Column(db.String(100))
     rating = db.Column(db.Float, default=0.0)
     rating_count = db.Column(db.Integer, default=0)
@@ -53,7 +55,7 @@ class Book(db.Model):
             'description': self.description,
             'cover_url': self.cover_url,
             'file_url': self.file_url,
-            'file_path': self.file_path,
+            'file_size': self.file_size,
             'type': self.type,
             'category': self.category,
             'rating': self.rating,
