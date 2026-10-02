@@ -12,7 +12,7 @@ class OfflineSyncService {
   Future<void> initialize() async {
     _syncManager = OfflineSyncManager(
       config: OfflineSyncConfig(
-        baseUrl: 'https://.api.fanoosy.ir/api',
+        baseUrl: 'https://api.fanoosy.ir/api',
         syncInterval: const Duration(minutes: 5),
         maxRetries: 5,
         conflictResolution: ConflictResolution.serverWins,
