@@ -11,7 +11,21 @@ import '../data/models/rating_model.dart';
 import '../core/database/db_helper.dart';
 
 class ApiService {
+  // ==================== تنظیمات ====================
+  /// آدرس سرور
   static String baseUrl = 'https://api.fanoosy.ir/api';
+
+  /// آدرس پایه بدون /api (برای ساخت URL فایل‌ها)
+  /// فقط اگر baseUrl با /api یا /api/ تمام شود، آن را حذف می‌کند
+  static String get fileBaseUrl {
+    if (baseUrl.endsWith('/api/')) {
+      return baseUrl.substring(0, baseUrl.length - 5);
+    }
+    if (baseUrl.endsWith('/api')) {
+      return baseUrl.substring(0, baseUrl.length - 4);
+    }
+    return baseUrl;
+  }
 
   static const Duration _timeout = Duration(seconds: 30);
   static const int _maxRetries = 3;
@@ -19,9 +33,6 @@ class ApiService {
 
   static String? _authToken;
   static UserModel? _currentUser;
-
-  /// آدرس پایه بدون /api (برای ساخت URL فایل‌ها)
-  static String get fileBaseUrl => baseUrl.replaceAll('/api', '');
 
   // ==================== مدیریت توکن و کاربر ====================
 
@@ -53,15 +64,15 @@ class ApiService {
   static Future<UserModel?> getCurrentUser() async {
     if (_currentUser != null) return _currentUser;
 
-    // اول از SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString('current_user');
     if (data != null) {
-      _currentUser = UserModel.fromMap(jsonDecode(data));
-      return _currentUser;
+      try {
+        _currentUser = UserModel.fromMap(jsonDecode(data));
+        return _currentUser;
+      } catch (_) {}
     }
 
-    // اگر نبود، از دیتابیس محلی
     final users = await DBHelper.getAllUsers();
     if (users.isNotEmpty) {
       _currentUser = users.first;
@@ -150,7 +161,10 @@ class ApiService {
   }
 
   static dynamic _handleResponse(http.Response response) {
-    debugPrint('🟢 Response [${response.statusCode}]: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...');
+    final bodyPreview = response.body.length > 200
+        ? response.body.substring(0, 200)
+        : response.body;
+    debugPrint('🟢 Response [${response.statusCode}]: $bodyPreview...');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (response.body.isEmpty) return null;
@@ -202,7 +216,6 @@ class ApiService {
         await setAuthToken(data['token']);
       }
 
-      // ذخیره در دیتابیس محلی
       await DBHelper.insertUser(user);
 
       return {
@@ -223,7 +236,7 @@ class ApiService {
     }
   }
 
-  // ==================== 📚 کتاب‌ها (مهم‌ترین بخش) ====================
+  // ==================== کتاب‌ها ====================
 
   /// دریافت کتاب‌ها از سرور و ذخیره در دیتابیس محلی
   static Future<List<BookModel>> fetchBooksAndCache({
@@ -244,7 +257,6 @@ class ApiService {
 
       final books = data.map((e) => BookModel.fromMap(e)).toList();
 
-      // ذخیره در دیتابیس محلی
       if (books.isNotEmpty) {
         await _saveBooksLocally(books);
         debugPrint('📚 Saved ${books.length} books to local DB');
@@ -253,7 +265,6 @@ class ApiService {
       return books;
     } catch (e) {
       debugPrint('❌ fetchBooksAndCache error: $e');
-      // در صورت خطا، از دیتابیس محلی بخوان
       return await DBHelper.getAllBooks();
     }
   }
@@ -262,10 +273,8 @@ class ApiService {
   static Future<void> _saveBooksLocally(List<BookModel> books) async {
     for (final book in books) {
       try {
-        // بررسی وجود کتاب با همین title در دیتابیس محلی
         final existing = await DBHelper.findBookByTitle(book.title);
         if (existing != null) {
-          // آپدیت اطلاعات ولی is_downloaded و file_path را حفظ کن
           final updated = book.copyWith(
             id: existing.id,
             filePath: existing.filePath,
@@ -282,7 +291,6 @@ class ApiService {
     }
   }
 
-  /// دریافت لیست کتاب‌ها (backward compatibility)
   static Future<List<BookModel>> fetchBooks({
     String? type,
     String? category,
@@ -310,10 +318,21 @@ class ApiService {
     Function(double progress)? onProgress,
   }) async {
     try {
-      final uri = Uri.parse(
-        fileUrl.startsWith('http') ? fileUrl : '$fileBaseUrl$fileUrl',
-      );
-      debugPrint('Downloading: $uri');
+      // ساخت URL صحیح
+      String fullUrl;
+      if (fileUrl.startsWith('http')) {
+        fullUrl = fileUrl;
+      } else {
+        final cleanBase = fileBaseUrl.endsWith('/')
+            ? fileBaseUrl.substring(0, fileBaseUrl.length - 1)
+            : fileBaseUrl;
+        final cleanPath =
+            fileUrl.startsWith('/') ? fileUrl : '/$fileUrl';
+        fullUrl = '$cleanBase$cleanPath';
+      }
+
+      debugPrint('🌐 Download URL: $fullUrl');
+      final uri = Uri.parse(fullUrl);
 
       final directory = await _getDownloadDirectory();
       final filePath = '${directory.path}/$fileName';
@@ -435,7 +454,8 @@ class ApiService {
     int limit = 5,
   }) async {
     try {
-      final response = await _get('/ai/recommendations/$userId?limit=$limit');
+      final response =
+          await _get('/ai/recommendations/$userId?limit=$limit');
       final data = _handleResponse(response) as List;
       return data.map((e) => BookModel.fromMap(e)).toList();
     } catch (e) {
