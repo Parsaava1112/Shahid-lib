@@ -11,6 +11,7 @@ import '../../data/models/user_model.dart';
 import '../../services/api_service.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/dicebear_avatar.dart';
+import '../widgets/book_cover.dart';
 import 'book_detail_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
@@ -50,9 +51,30 @@ class _HomeScreenState extends State<HomeScreen> {
       // راه‌اندازی سرویس دستاورد
       await AchievementService.initialize();
 
-      // دریافت کتاب‌ها
-      var books = await DBHelper.getAllBooks();
+      // 🔄 مرحله ۱: دریافت کتاب‌ها از سرور و ذخیره در دیتابیس محلی
+      List<BookModel> books = [];
+      try {
+        final serverAvailable = await ApiService.isServerAvailable();
+        if (serverAvailable) {
+          debugPrint('📚 Server available, fetching books...');
+          books = await ApiService.fetchBooksAndCache();
+          debugPrint('📚 Books from server: ${books.length}');
+        } else {
+          debugPrint('⚠️ Server not available, using local DB');
+        }
+      } catch (e) {
+        debugPrint('❌ Server fetch error: $e');
+      }
+
+      // 🔄 مرحله ۲: اگر سرور کتابی نداشت، از دیتابیس محلی بخوان
       if (books.isEmpty) {
+        books = await DBHelper.getAllBooks();
+        debugPrint('📚 Books from local DB: ${books.length}');
+      }
+
+      // 🔄 مرحله ۳: اگر هر دو خالی بودند، داده نمونه بساز
+      if (books.isEmpty) {
+        debugPrint('⚠️ No books found, seeding sample data');
         await _seedSampleData();
         books = await DBHelper.getAllBooks();
       }
@@ -69,7 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
       };
       if (user?.id != null) {
         stats = await DBHelper.getUserStats(user!.id!);
-        // بررسی دستاوردها
         await AchievementService.checkAndUnlock(user.id!);
       }
 
@@ -171,6 +192,48 @@ class _HomeScreenState extends State<HomeScreen> {
   int get _xp => (_stats['xp'] as num?)?.toInt() ?? 0;
   int get _level => AchievementService.levelForXp(_xp);
 
+  Future<void> _manualSync() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text('در حال همگام‌سازی...', style: GoogleFonts.vazirmatn()),
+          ],
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    await _loadAll();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white),
+              const SizedBox(width: 10),
+              Text(
+                '${_books.length} اثر بارگذاری شد',
+                style: GoogleFonts.vazirmatn(),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -179,9 +242,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: theme.colorScheme.background,
       floatingActionButton: FloatingActionButton(
-        onPressed: _loadAll,
+        onPressed: _manualSync,
         backgroundColor: theme.colorScheme.primary,
-        child: const Icon(Icons.refresh_rounded, color: Colors.white),
+        child: const Icon(Icons.sync_rounded, color: Colors.white),
       ),
       body: AnimatedBackground(
         blobCount: 5,
@@ -208,8 +271,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==================== AppBar ====================
-
   Widget _buildAppBar(ThemeData theme, ThemeController themeController) {
     return SliverAppBar(
       backgroundColor: Colors.transparent,
@@ -221,7 +282,6 @@ class _HomeScreenState extends State<HomeScreen> {
         titlePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         title: Row(
           children: [
-            // آواتار کاربر
             DiceBearAvatar(
               seed: _user?.avatarSeed ?? _user?.nationalCode ?? 'shahid',
               style: _user?.avatarStyle ?? 'adventurer',
@@ -284,14 +344,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==================== Welcome Banner ====================
-
   Widget _buildWelcomeBanner(ThemeData theme) {
-    final xpInLevel =
-        AchievementService.xpInCurrentLevel(_xp).toDouble();
-    final xpNeeded =
-        AchievementService.xpForLevel(_level).toDouble();
-    final progress = (xpInLevel / xpNeeded).clamp(0.0, 1.0);
+    final xpInLevel = AchievementService.xpInCurrentLevel(_xp).toDouble();
+    final xpNeeded = AchievementService.xpForLevel(_level).toDouble();
+    final progress =
+        xpNeeded > 0 ? (xpInLevel / xpNeeded).clamp(0.0, 1.0) : 0.0;
 
     return SliverToBoxAdapter(
       child: Padding(
@@ -380,7 +437,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
-                  value: progress.toDouble(),
+                  value: progress,
                   minHeight: 8,
                   backgroundColor: Colors.white.withOpacity(0.2),
                   valueColor: const AlwaysStoppedAnimation(Colors.white),
@@ -403,8 +460,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // ==================== Stats Row ====================
 
   Widget _buildStatsRow(ThemeData theme) {
     final booksRead = (_stats['total_books_read'] as num?)?.toInt() ?? 0;
@@ -495,8 +550,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==================== Category Chips ====================
-
   Widget _buildCategoryChips(ThemeData theme) {
     return SliverToBoxAdapter(
       child: SizedBox(
@@ -515,9 +568,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 selected: active,
                 onSelected: (_) => _filterBooks(cat),
                 labelStyle: GoogleFonts.vazirmatn(
-                  color: active
-                      ? Colors.white
-                      : theme.colorScheme.onSurface,
+                  color:
+                      active ? Colors.white : theme.colorScheme.onSurface,
                   fontWeight: active ? FontWeight.bold : FontWeight.normal,
                   fontSize: 13,
                 ),
@@ -539,8 +591,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==================== Book List ====================
-
   Widget _buildBookList(ThemeData theme) {
     if (_filteredBooks.isEmpty) {
       return SliverFillRemaining(
@@ -558,6 +608,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: GoogleFonts.vazirmatn(
                   fontSize: 16,
                   color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _manualSync,
+                icon: const Icon(Icons.sync_rounded),
+                label: Text(
+                  'همگام‌سازی با سرور',
+                  style: GoogleFonts.vazirmatn(),
                 ),
               ),
             ],
@@ -578,7 +637,8 @@ class _HomeScreenState extends State<HomeScreen> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => BookDetailScreen(book: _filteredBooks[i]),
+                  builder: (_) =>
+                      BookDetailScreen(book: _filteredBooks[i]),
                 ),
               );
               _loadAll();
@@ -602,19 +662,6 @@ class _BookCard extends StatelessWidget {
     required this.index,
     required this.onTap,
   });
-
-  IconData _icon() {
-    switch (book.type) {
-      case 'pdf':
-        return Icons.picture_as_pdf_rounded;
-      case 'audio':
-        return Icons.headphones_rounded;
-      case 'video':
-        return Icons.videocam_rounded;
-      default:
-        return Icons.book_rounded;
-    }
-  }
 
   Color _color(ThemeData theme) {
     switch (book.type) {
@@ -662,25 +709,12 @@ class _BookCard extends StatelessWidget {
               children: [
                 Hero(
                   tag: 'book_${book.id}',
-                  child: Container(
+                  child: BookCover(
+                    book: book,
                     width: 64,
                     height: 84,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          color.withOpacity(0.25),
-                          color.withOpacity(0.08),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: color.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Icon(_icon(), color: color, size: 32),
+                    radius: 14,
+                    baseUrl: ApiService.fileBaseUrl,
                   ),
                 ),
                 const SizedBox(width: 14),

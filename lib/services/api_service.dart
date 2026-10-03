@@ -10,42 +10,32 @@ import '../data/models/book_model.dart';
 import '../data/models/rating_model.dart';
 import '../core/database/db_helper.dart';
 
-/// سرویس ارتباط با بک‌اند Flask
-/// تمام APIها با مدیریت خطا، timeout و retry پیاده‌سازی شده‌اند
 class ApiService {
-  // ==================== تنظیمات پایه ====================
-
-  /// آدرس سرور - این را با IP سرور خود جایگزین کنید
-  /// برای اندروید امولاتور: 10.0.2.2
-  /// برای دستگاه واقعی: IP کامپیوتر شما (مثلاً 192.168.1.100)
   static String baseUrl = 'https://api.fanoosy.ir/api';
 
   static const Duration _timeout = Duration(seconds: 30);
   static const int _maxRetries = 3;
   static const Duration _retryDelay = Duration(seconds: 2);
 
-  /// توکن احراز هویت (اگر در آینده JWT اضافه شود)
   static String? _authToken;
-
-  /// کاربر جاری ذخیره‌شده
   static UserModel? _currentUser;
+
+  /// آدرس پایه بدون /api (برای ساخت URL فایل‌ها)
+  static String get fileBaseUrl => baseUrl.replaceAll('/api', '');
 
   // ==================== مدیریت توکن و کاربر ====================
 
-  /// ذخیره توکن احراز هویت
   static Future<void> setAuthToken(String token) async {
     _authToken = token;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
   }
 
-  /// بارگذاری توکن ذخیره‌شده
   static Future<void> loadAuthToken() async {
     final prefs = await SharedPreferences.getInstance();
     _authToken = prefs.getString('auth_token');
   }
 
-  /// پاک کردن توکن (خروج از حساب)
   static Future<void> clearAuthToken() async {
     _authToken = null;
     _currentUser = null;
@@ -54,26 +44,34 @@ class ApiService {
     await prefs.remove('current_user');
   }
 
-  /// ذخیره کاربر جاری
   static Future<void> setCurrentUser(UserModel user) async {
     _currentUser = user;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('current_user', jsonEncode(user.toMap()));
   }
 
-  /// دریافت کاربر جاری
   static Future<UserModel?> getCurrentUser() async {
     if (_currentUser != null) return _currentUser;
+
+    // اول از SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString('current_user');
     if (data != null) {
       _currentUser = UserModel.fromMap(jsonDecode(data));
       return _currentUser;
     }
+
+    // اگر نبود، از دیتابیس محلی
+    final users = await DBHelper.getAllUsers();
+    if (users.isNotEmpty) {
+      _currentUser = users.first;
+      return _currentUser;
+    }
+
     return null;
   }
 
-  // ==================== هدرهای درخواست ====================
+  // ==================== هدرها ====================
 
   static Map<String, String> get _headers {
     final headers = <String, String>{
@@ -86,33 +84,29 @@ class ApiService {
     return headers;
   }
 
-  // ==================== متدهای کمکی HTTP ====================
+  // ==================== متدهای HTTP ====================
 
-  /// درخواست GET با retry خودکار
   static Future<http.Response> _get(String endpoint) async {
     return _retryRequest(() async {
       final uri = Uri.parse('$baseUrl$endpoint');
-      debugPrint('GET: $uri');
+      debugPrint('🔵 GET: $uri');
       return await http.get(uri, headers: _headers).timeout(_timeout);
     });
   }
 
-  /// درخواست POST با retry خودکار
   static Future<http.Response> _post(
     String endpoint,
     Map<String, dynamic> body,
   ) async {
     return _retryRequest(() async {
       final uri = Uri.parse('$baseUrl$endpoint');
-      debugPrint('POST: $uri');
-      debugPrint('Body: $body');
+      debugPrint('🔵 POST: $uri');
       return await http
           .post(uri, headers: _headers, body: jsonEncode(body))
           .timeout(_timeout);
     });
   }
 
-  /// درخواست PUT با retry خودکار
   static Future<http.Response> _put(
     String endpoint,
     Map<String, dynamic> body,
@@ -125,15 +119,6 @@ class ApiService {
     });
   }
 
-  /// درخواست DELETE
-  static Future<http.Response> _delete(String endpoint) async {
-    return _retryRequest(() async {
-      final uri = Uri.parse('$baseUrl$endpoint');
-      return await http.delete(uri, headers: _headers).timeout(_timeout);
-    });
-  }
-
-  /// Retry خودکار در صورت خطای شبکه
   static Future<http.Response> _retryRequest(
     Future<http.Response> Function() request,
   ) async {
@@ -141,7 +126,6 @@ class ApiService {
     while (attempts < _maxRetries) {
       try {
         final response = await request();
-        // اگر خطای سرور 5xx بود، دوباره تلاش کن
         if (response.statusCode >= 500 && attempts < _maxRetries - 1) {
           attempts++;
           await Future.delayed(_retryDelay * attempts);
@@ -165,9 +149,8 @@ class ApiService {
     throw Exception('عدم پاسخگویی سرور پس از $_maxRetries تلاش');
   }
 
-  /// بررسی و解析 پاسخ
   static dynamic _handleResponse(http.Response response) {
-    debugPrint('Response [${response.statusCode}]: ${response.body}');
+    debugPrint('🟢 Response [${response.statusCode}]: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (response.body.isEmpty) return null;
@@ -186,9 +169,22 @@ class ApiService {
     }
   }
 
-  // ==================== ۱. احراز هویت ====================
+  // ==================== بررسی سلامت سرور ====================
 
-  /// ورود / ثبت‌نام با نام و کد ملی
+  static Future<bool> isServerAvailable() async {
+    try {
+      final uri = Uri.parse('$baseUrl/health');
+      final response = await http
+          .get(uri)
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ==================== احراز هویت ====================
+
   static Future<Map<String, dynamic>> login({
     required String name,
     required String nationalCode,
@@ -205,6 +201,10 @@ class ApiService {
       if (data['token'] != null) {
         await setAuthToken(data['token']);
       }
+
+      // ذخیره در دیتابیس محلی
+      await DBHelper.insertUser(user);
+
       return {
         'success': true,
         'user': user,
@@ -223,10 +223,10 @@ class ApiService {
     }
   }
 
-  // ==================== ۲. کتاب‌ها ====================
+  // ==================== 📚 کتاب‌ها (مهم‌ترین بخش) ====================
 
-  /// دریافت لیست کتاب‌ها از سرور
-  static Future<List<BookModel>> fetchBooks({
+  /// دریافت کتاب‌ها از سرور و ذخیره در دیتابیس محلی
+  static Future<List<BookModel>> fetchBooksAndCache({
     String? type,
     String? category,
   }) async {
@@ -237,17 +237,59 @@ class ApiService {
       if (category != null) params.add('category=$category');
       if (params.isNotEmpty) endpoint += '?${params.join('&')}';
 
+      debugPrint('📚 Fetching books from: $baseUrl$endpoint');
       final response = await _get(endpoint);
       final data = _handleResponse(response) as List;
-      return data.map((e) => BookModel.fromMap(e)).toList();
+      debugPrint('📚 Server returned ${data.length} books');
+
+      final books = data.map((e) => BookModel.fromMap(e)).toList();
+
+      // ذخیره در دیتابیس محلی
+      if (books.isNotEmpty) {
+        await _saveBooksLocally(books);
+        debugPrint('📚 Saved ${books.length} books to local DB');
+      }
+
+      return books;
     } catch (e) {
-      debugPrint('fetchBooks error: $e');
+      debugPrint('❌ fetchBooksAndCache error: $e');
       // در صورت خطا، از دیتابیس محلی بخوان
       return await DBHelper.getAllBooks();
     }
   }
 
-  /// دریافت جزئیات یک کتاب
+  /// ذخیره کتاب‌ها در دیتابیس محلی (با حفظ وضعیت دانلود)
+  static Future<void> _saveBooksLocally(List<BookModel> books) async {
+    for (final book in books) {
+      try {
+        // بررسی وجود کتاب با همین title در دیتابیس محلی
+        final existing = await DBHelper.findBookByTitle(book.title);
+        if (existing != null) {
+          // آپدیت اطلاعات ولی is_downloaded و file_path را حفظ کن
+          final updated = book.copyWith(
+            id: existing.id,
+            filePath: existing.filePath,
+            isDownloaded: existing.isDownloaded,
+            downloadedAt: existing.downloadedAt,
+          );
+          await DBHelper.updateBook(updated);
+        } else {
+          await DBHelper.insertBook(book);
+        }
+      } catch (e) {
+        debugPrint('Save book error for "${book.title}": $e');
+      }
+    }
+  }
+
+  /// دریافت لیست کتاب‌ها (backward compatibility)
+  static Future<List<BookModel>> fetchBooks({
+    String? type,
+    String? category,
+  }) async {
+    return fetchBooksAndCache(type: type, category: category);
+  }
+
   static Future<BookModel?> fetchBookDetail(int bookId) async {
     try {
       final response = await _get('/books/$bookId');
@@ -259,8 +301,8 @@ class ApiService {
     }
   }
 
-  /// دانلود فایل کتاب (PDF، صوت، ویدیو)
-  /// فایل را در حافظه موقت ذخیره می‌کند و مسیر را برمی‌گرداند
+  // ==================== دانلود فایل ====================
+
   static Future<String?> downloadBookFile({
     required int bookId,
     required String fileUrl,
@@ -269,22 +311,18 @@ class ApiService {
   }) async {
     try {
       final uri = Uri.parse(
-        fileUrl.startsWith('http') ? fileUrl : '$baseUrl$fileUrl',
+        fileUrl.startsWith('http') ? fileUrl : '$fileBaseUrl$fileUrl',
       );
       debugPrint('Downloading: $uri');
 
-      // ساخت مسیر ذخیره
       final directory = await _getDownloadDirectory();
       final filePath = '${directory.path}/$fileName';
       final file = File(filePath);
 
-      // اگر فایل قبلاً دانلود شده، برگردان
       if (await file.exists()) {
-        debugPrint('File already exists: $filePath');
         return filePath;
       }
 
-      // دانلود با streaming برای نمایش پیشرفت
       final request = http.Request('GET', uri);
       request.headers.addAll(_headers);
       final streamedResponse = await request.send().timeout(_timeout);
@@ -310,7 +348,6 @@ class ApiService {
       await sink.flush();
       await sink.close();
 
-      debugPrint('Download complete: $filePath');
       return filePath;
     } catch (e) {
       debugPrint('downloadBookFile error: $e');
@@ -318,12 +355,8 @@ class ApiService {
     }
   }
 
-  /// دریافت پوشه دانلود
   static Future<Directory> _getDownloadDirectory() async {
-    // در اندروید از مسیر اپ استفاده می‌کنیم
-    final directory = Directory(
-      '${await _getAppDirectory()}/books',
-    );
+    final directory = Directory('${await _getAppDirectory()}/books');
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
@@ -331,7 +364,6 @@ class ApiService {
   }
 
   static Future<String> _getAppDirectory() async {
-    // مسیر پیش‌فرض اپ در اندروید
     if (Platform.isAndroid) {
       return '/storage/emulated/0/Android/data/com.example.shahid_suleimani_library/files';
     } else if (Platform.isIOS) {
@@ -341,9 +373,8 @@ class ApiService {
     return Directory.current.path;
   }
 
-  // ==================== ۳. امتیازات و نظرات ====================
+  // ==================== امتیازات ====================
 
-  /// ثبت امتیاز برای یک کتاب
   static Future<Map<String, dynamic>> submitRating({
     required int bookId,
     required String userName,
@@ -360,13 +391,8 @@ class ApiService {
       _handleResponse(response);
       return {'success': true, 'message': 'امتیاز ثبت شد'};
     } on ApiException catch (e) {
-      // در حالت آفلاین، در صف همگام‌سازی ذخیره کن
       await _queueRating(bookId, userName, rating, comment);
-      return {
-        'success': false,
-        'error': e.message,
-        'queued': true,
-      };
+      return {'success': false, 'error': e.message, 'queued': true};
     } catch (e) {
       await _queueRating(bookId, userName, rating, comment);
       return {
@@ -377,7 +403,6 @@ class ApiService {
     }
   }
 
-  /// ذخیره امتیاز در صف آفلاین
   static Future<void> _queueRating(
     int bookId,
     String userName,
@@ -393,53 +418,43 @@ class ApiService {
     await DBHelper.addToSyncQueue('rating', payload);
   }
 
-  /// دریافت امتیازات یک کتاب
   static Future<List<RatingModel>> fetchRatings(int bookId) async {
     try {
       final response = await _get('/ratings/$bookId');
       final data = _handleResponse(response) as List;
       return data.map((e) => RatingModel.fromMap(e)).toList();
     } catch (e) {
-      debugPrint('fetchRatings error: $e');
       return await DBHelper.getRatingsForBook(bookId);
     }
   }
 
-  // ==================== ۴. هوش مصنوعی (AI) ====================
+  // ==================== هوش مصنوعی ====================
 
-  /// دریافت توصیه‌های کتاب از AI
   static Future<List<BookModel>> fetchRecommendations({
     required int userId,
     int limit = 5,
   }) async {
     try {
-      final response = await _get(
-        '/ai/recommendations/$userId?limit=$limit',
-      );
+      final response = await _get('/ai/recommendations/$userId?limit=$limit');
       final data = _handleResponse(response) as List;
       return data.map((e) => BookModel.fromMap(e)).toList();
     } catch (e) {
-      debugPrint('fetchRecommendations error: $e');
-      // در حالت آفلاین، کتاب‌های با امتیاز بالا را برگردان
       final all = await DBHelper.getAllBooks();
       all.sort((a, b) => b.rating.compareTo(a.rating));
       return all.take(limit).toList();
     }
   }
 
-  /// دریافت پیام انگیزشی از AI
   static Future<String> fetchMotivationalMessage(int userId) async {
     try {
       final response = await _get('/ai/message/$userId');
       final data = _handleResponse(response);
       return data['message'] ?? _getLocalMotivationalMessage();
     } catch (e) {
-      debugPrint('fetchMotivationalMessage error: $e');
       return _getLocalMotivationalMessage();
     }
   }
 
-  /// پیام انگیزشی محلی (در صورت عدم دسترسی به سرور)
   static String _getLocalMotivationalMessage() {
     final messages = [
       'امروز یه کتاب خوب بخون. حتی ۱۰ دقیقه.',
@@ -452,14 +467,12 @@ class ApiService {
     return messages.first;
   }
 
-  /// دریافت آمار کاربر از AI
   static Future<Map<String, dynamic>> fetchUserStats(int userId) async {
     try {
       final response = await _get('/ai/stats/$userId');
       final data = _handleResponse(response) as Map<String, dynamic>;
       return data;
     } catch (e) {
-      debugPrint('fetchUserStats error: $e');
       return {
         'total_books_read': 0,
         'total_minutes_read': 0,
@@ -469,7 +482,6 @@ class ApiService {
     }
   }
 
-  /// ثبت فعالیت کاربر (برای محاسبه استریک)
   static Future<bool> recordActivity({
     required int userId,
     required int bookId,
@@ -486,8 +498,6 @@ class ApiService {
       _handleResponse(response);
       return true;
     } catch (e) {
-      debugPrint('recordActivity error: $e');
-      // در صف آفلاین ذخیره کن
       await DBHelper.addToSyncQueue(
         'activity',
         jsonEncode({
@@ -501,9 +511,8 @@ class ApiService {
     }
   }
 
-  // ==================== ۵. جدول امتیازات ====================
+  // ==================== لیدربورد ====================
 
-  /// دریافت لیدربورد
   static Future<List<Map<String, dynamic>>> fetchLeaderboard({
     String period = 'weekly',
   }) async {
@@ -512,26 +521,22 @@ class ApiService {
       final data = _handleResponse(response) as List;
       return data.cast<Map<String, dynamic>>();
     } catch (e) {
-      debugPrint('fetchLeaderboard error: $e');
       return [];
     }
   }
 
-  // ==================== ۶. حلقه‌های مطالعه ====================
+  // ==================== حلقه‌های مطالعه ====================
 
-  /// دریافت لیست حلقه‌های مطالعه
   static Future<List<Map<String, dynamic>>> fetchCircles() async {
     try {
       final response = await _get('/circles');
       final data = _handleResponse(response) as List;
       return data.cast<Map<String, dynamic>>();
     } catch (e) {
-      debugPrint('fetchCircles error: $e');
       return [];
     }
   }
 
-  /// ایجاد حلقه مطالعه جدید
   static Future<Map<String, dynamic>> createCircle({
     required String name,
     required int userId,
@@ -554,7 +559,6 @@ class ApiService {
     }
   }
 
-  /// عضویت در حلقه مطالعه
   static Future<Map<String, dynamic>> joinCircle({
     required int circleId,
     required int userId,
@@ -572,65 +576,8 @@ class ApiService {
     }
   }
 
-  // ==================== ۷. آپلود فایل (ادمین) ====================
+  // ==================== همگام‌سازی آفلاین ====================
 
-  /// آپلود فایل کتاب (برای پنل ادمین)
-  static Future<Map<String, dynamic>> uploadBookFile({
-    required File file,
-    required String type,
-    required String title,
-    String? author,
-    String? description,
-    String? category,
-    Function(double progress)? onProgress,
-  }) async {
-    try {
-      final uri = Uri.parse('$baseUrl/upload');
-      final request = http.MultipartRequest('POST', uri);
-
-      // اضافه کردن هدرها
-      if (_authToken != null) {
-        request.headers['Authorization'] = 'Bearer $_authToken';
-      }
-
-      // فیلدهای فرم
-      request.fields['type'] = type;
-      request.fields['title'] = title;
-      if (author != null) request.fields['author'] = author;
-      if (description != null) request.fields['description'] = description;
-      if (category != null) request.fields['category'] = category;
-
-      // فایل
-      final stream = http.ByteStream(file.openRead());
-      final length = await file.length();
-      final multipartFile = http.MultipartFile(
-        'file',
-        stream,
-        length,
-        filename: file.path.split('/').last,
-      );
-      request.files.add(multipartFile);
-
-      // ارسال با پیگیری پیشرفت
-      final streamedResponse = await request.send().timeout(
-            const Duration(minutes: 10),
-          );
-
-      // خواندن پاسخ
-      final response = await http.Response.fromStream(streamedResponse);
-      final data = _handleResponse(response);
-
-      return {'success': true, 'data': data};
-    } on ApiException catch (e) {
-      return {'success': false, 'error': e.message};
-    } catch (e) {
-      return {'success': false, 'error': 'خطای آپلود: $e'};
-    }
-  }
-
-  // ==================== ۸. همگام‌سازی آفلاین ====================
-
-  /// همگام‌سازی تمام عملیات در صف
   static Future<Map<String, int>> syncPendingOperations() async {
     int successCount = 0;
     int failCount = 0;
@@ -655,7 +602,6 @@ class ApiService {
               );
               success = result['success'] == true;
               break;
-
             case 'activity':
               success = await recordActivity(
                 userId: payload['user_id'],
@@ -664,10 +610,8 @@ class ApiService {
                 minutes: payload['minutes'] ?? 0,
               );
               break;
-
             default:
-              debugPrint('Unknown operation: $operation');
-              success = true; // نادیده بگیر
+              success = true;
           }
 
           if (success) {
@@ -677,7 +621,6 @@ class ApiService {
             failCount++;
           }
         } catch (e) {
-          debugPrint('Sync error for item ${item['id']}: $e');
           failCount++;
         }
       }
@@ -688,24 +631,8 @@ class ApiService {
     return {'success': successCount, 'failed': failCount};
   }
 
-  // ==================== ۹. بررسی اتصال ====================
+  // ==================== FCM Token ====================
 
-  /// بررسی در دسترس بودن سرور
-  static Future<bool> isServerAvailable() async {
-    try {
-      final uri = Uri.parse('$baseUrl/health');
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 5));
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  // ==================== ۱۰. FCM Token ====================
-
-  /// ثبت FCM Token برای دریافت اعلان‌ها
   static Future<bool> registerFcmToken({
     required int userId,
     required String token,
@@ -717,14 +644,12 @@ class ApiService {
       _handleResponse(response);
       return true;
     } catch (e) {
-      debugPrint('registerFcmToken error: $e');
       return false;
     }
   }
 
-  // ==================== ۱۱. بروزرسانی پروفایل ====================
+  // ==================== بروزرسانی پروفایل ====================
 
-  /// بروزرسانی اطلاعات کاربر
   static Future<Map<String, dynamic>> updateUserProfile({
     required int userId,
     String? name,
@@ -739,14 +664,11 @@ class ApiService {
       if (bio != null) body['bio'] = bio;
       if (avatarSeed != null) body['avatar_seed'] = avatarSeed;
       if (avatarStyle != null) body['avatar_style'] = avatarStyle;
-      if (themePreference != null) {
-        body['theme_preference'] = themePreference;
-      }
+      if (themePreference != null) body['theme_preference'] = themePreference;
 
       final response = await _put('/users/$userId', body);
       final data = _handleResponse(response);
 
-      // بروزرسانی در حافظه محلی
       if (data['user'] != null) {
         final updated = UserModel.fromMap(data['user']);
         await setCurrentUser(updated);
@@ -761,8 +683,6 @@ class ApiService {
     }
   }
 }
-
-// ==================== کلاس خطای سفارشی ====================
 
 class ApiException implements Exception {
   final String message;

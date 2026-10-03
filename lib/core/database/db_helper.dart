@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:flutter/foundation.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/book_model.dart';
 import '../../data/models/rating_model.dart';
@@ -35,7 +36,6 @@ class DBHelper {
   }
 
   static Future<void> _onCreate(Database db, int version) async {
-    // کاربران
     await db.execute('''
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +49,6 @@ class DBHelper {
       )
     ''');
 
-    // کتاب‌ها
     await db.execute('''
       CREATE TABLE books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +58,7 @@ class DBHelper {
         cover_url TEXT,
         file_url TEXT,
         file_path TEXT,
+        file_size INTEGER DEFAULT 0,
         type TEXT NOT NULL,
         category TEXT,
         rating REAL DEFAULT 0,
@@ -69,7 +69,6 @@ class DBHelper {
       )
     ''');
 
-    // امتیازات
     await db.execute('''
       CREATE TABLE ratings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +80,6 @@ class DBHelper {
       )
     ''');
 
-    // فعالیت‌ها
     await db.execute('''
       CREATE TABLE user_activities (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,7 +92,6 @@ class DBHelper {
       )
     ''');
 
-    // پیشرفت مطالعه
     await db.execute('''
       CREATE TABLE reading_progress (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,7 +105,6 @@ class DBHelper {
       )
     ''');
 
-    // نشانک‌ها
     await db.execute('''
       CREATE TABLE bookmarks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,7 +116,6 @@ class DBHelper {
       )
     ''');
 
-    // دستاوردها
     await db.execute('''
       CREATE TABLE achievements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,7 +126,6 @@ class DBHelper {
       )
     ''');
 
-    // صف همگام‌سازی
     await db.execute('''
       CREATE TABLE sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,7 +136,6 @@ class DBHelper {
       )
     ''');
 
-    // ایندکس‌ها
     await db.execute('CREATE INDEX idx_books_type ON books (type)');
     await db.execute('CREATE INDEX idx_ratings_book ON ratings (book_id)');
     await db.execute(
@@ -155,46 +148,58 @@ class DBHelper {
     int newVersion,
   ) async {
     if (oldVersion < 2) {
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS reading_progress (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          book_id INTEGER NOT NULL,
-          current_page INTEGER DEFAULT 1,
-          total_pages INTEGER DEFAULT 0,
-          is_completed INTEGER DEFAULT 0,
-          updated_at TEXT NOT NULL,
-          UNIQUE(user_id, book_id)
-        )
-      ''');
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS bookmarks (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          book_id INTEGER NOT NULL,
-          page INTEGER NOT NULL,
-          note TEXT,
-          created_at TEXT NOT NULL
-        )
-      ''');
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS achievements (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          achievement_id TEXT NOT NULL,
-          unlocked_at TEXT NOT NULL,
-          UNIQUE(user_id, achievement_id)
-        )
-      ''');
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS sync_queue (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          operation TEXT NOT NULL,
-          payload TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          retry_count INTEGER DEFAULT 0
-        )
-      ''');
+      try {
+        await db.execute(
+            'ALTER TABLE books ADD COLUMN file_size INTEGER DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS reading_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            book_id INTEGER NOT NULL,
+            current_page INTEGER DEFAULT 1,
+            total_pages INTEGER DEFAULT 0,
+            is_completed INTEGER DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            UNIQUE(user_id, book_id)
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS bookmarks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            book_id INTEGER NOT NULL,
+            page INTEGER NOT NULL,
+            note TEXT,
+            created_at TEXT NOT NULL
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS achievements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            achievement_id TEXT NOT NULL,
+            unlocked_at TEXT NOT NULL,
+            UNIQUE(user_id, achievement_id)
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS sync_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            retry_count INTEGER DEFAULT 0
+          )
+        ''');
+      } catch (_) {}
     }
   }
 
@@ -203,12 +208,30 @@ class DBHelper {
   static Future<int> insertUser(UserModel user) async {
     final db = await database;
     final map = user.toMap();
+    map.remove('id'); // برای جلوگیری از conflict
     map['created_at'] = DateTime.now().toIso8601String();
-    return await db.insert(
-      'users',
-      map,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+
+    // بررسی وجود کاربر با این کد ملی
+    if (user.nationalCode.isNotEmpty) {
+      final existing = await getUserByNationalCode(user.nationalCode);
+      if (existing != null) {
+        // اگر هست، آپدیت کن
+        final updated = UserModel(
+          id: existing.id,
+          name: user.name,
+          nationalCode: user.nationalCode,
+          avatarSeed: user.avatarSeed ?? existing.avatarSeed,
+          avatarStyle: user.avatarStyle ?? existing.avatarStyle,
+          bio: user.bio ?? existing.bio,
+          themePreference: user.themePreference ?? existing.themePreference,
+        );
+        await updateUser(updated);
+        return existing.id ?? 0;
+      }
+    }
+
+    return await db.insert('users', map,
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   static Future<UserModel?> getUserByNationalCode(String code) async {
@@ -257,12 +280,29 @@ class DBHelper {
   static Future<int> insertBook(BookModel book) async {
     final db = await database;
     final map = book.toMap();
+    map.remove('id');
     map['created_at'] = DateTime.now().toIso8601String();
     return await db.insert(
       'books',
       map,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  static Future<void> insertBooks(List<BookModel> books) async {
+    final db = await database;
+    final batch = db.batch();
+    for (final book in books) {
+      final map = book.toMap();
+      map.remove('id');
+      map['created_at'] = DateTime.now().toIso8601String();
+      batch.insert(
+        'books',
+        map,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   static Future<List<BookModel>> getAllBooks() async {
@@ -304,6 +344,19 @@ class DBHelper {
     return null;
   }
 
+  /// پیدا کردن کتاب بر اساس عنوان (برای sync)
+  static Future<BookModel?> findBookByTitle(String title) async {
+    final db = await database;
+    final maps = await db.query(
+      'books',
+      where: 'title = ?',
+      whereArgs: [title],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) return BookModel.fromMap(maps.first);
+    return null;
+  }
+
   static Future<int> updateBook(BookModel book) async {
     if (book.id == null) return 0;
     final db = await database;
@@ -315,7 +368,8 @@ class DBHelper {
     );
   }
 
-  static Future<int> markBookAsDownloaded(int bookId, String filePath) async {
+  static Future<int> markBookAsDownloaded(
+      int bookId, String filePath) async {
     final db = await database;
     return await db.update(
       'books',
@@ -332,6 +386,11 @@ class DBHelper {
   static Future<int> deleteBook(int id) async {
     final db = await database;
     return await db.delete('books', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<void> deleteAllBooks() async {
+    final db = await database;
+    await db.delete('books');
   }
 
   // ==================== امتیازات ====================
@@ -464,9 +523,8 @@ class DBHelper {
         ? (streakResult.first['current_streak'] as num?)?.toInt() ?? 0
         : 0;
 
-    final ratingsResult = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM ratings',
-    );
+    final ratingsResult =
+        await db.rawQuery('SELECT COUNT(*) as count FROM ratings');
     final ratingsCount =
         (ratingsResult.first['count'] as num?)?.toInt() ?? 0;
 
