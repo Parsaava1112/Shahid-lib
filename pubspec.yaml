@@ -28,6 +28,8 @@ dependencies:
   # ==================== UI / Fonts ====================
   google_fonts: ^6.2.1
 
+  universal_downloader: ^1.1.2
+
   # ==================== Avatar ====================
   dicebear_core: ^10.7.0
   dicebear_styles: ^10.0.0
