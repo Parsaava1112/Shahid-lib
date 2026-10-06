@@ -278,7 +278,8 @@ class _MyBooksScreenState extends State<MyBooksScreen>
                     width: 110,
                     height: 150,
                     radius: 12,
-                    baseUrl: ApiService.baseUrl.replaceAll('/api', ''),
+                    // ✅ اصلاح: استفاده از fileBaseUrl
+                    baseUrl: ApiService.fileBaseUrl,
                   ),
                 ),
               ),

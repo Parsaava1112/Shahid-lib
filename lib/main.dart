@@ -10,7 +10,7 @@ void main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    FlutterError.onError = (details) {
+    FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
       debugPrint('❌ FLUTTER ERROR: ${details.exception}');
     };
@@ -19,7 +19,7 @@ void main() async {
       await JustAudioBackground.init(
         androidNotificationChannelId:
             'com.example.shahid_suleimani_library.channel.audio',
-        androidNotificationChannelName: 'کتابخانه شهید سلیمانی',
+        androidNotificationChannelName: 'کتابخانه شهید بهشتی',
         androidNotificationOngoing: true,
       );
     } catch (e) {
@@ -42,16 +42,18 @@ class ShahidLibraryApp extends StatelessWidget {
       child: Consumer<ThemeController>(
         builder: (context, themeController, _) {
           return MaterialApp(
-            title: 'کتابخانه شهید حاج قاسم سلیمانی',
+            title: 'کتابخانه شهید بهشتی',
             debugShowCheckedModeBanner: false,
             theme: themeController.themeFor(Brightness.light),
             darkTheme: themeController.themeFor(Brightness.dark),
             themeMode: themeController.mode,
             locale: const Locale('fa', 'IR'),
-            builder: (context, child) => Directionality(
-              textDirection: TextDirection.rtl,
-              child: child!,
-            ),
+            builder: (context, child) {
+              return Directionality(
+                textDirection: TextDirection.rtl,
+                child: child!,
+              );
+            },
             home: const SplashScreen(),
           );
         },

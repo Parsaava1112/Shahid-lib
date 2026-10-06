@@ -204,7 +204,7 @@ class SettingsScreen extends StatelessWidget {
                         size: 48, color: scheme.primary),
                     const SizedBox(height: 12),
                     Text(
-                      'کتابخانه شهید حاج قاسم سلیمانی',
+                      'کتابخانه مدرسه استعداد های درخشان شهید بهشتی ناحیه دو شهرری مطوسه اول',
                       style: GoogleFonts.vazirmatn(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

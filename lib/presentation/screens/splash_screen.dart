@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import '../../core/widgets/animated_background.dart';
 import 'login_screen.dart';
 
@@ -18,7 +17,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _ringCtrl;
   late AnimationController _textCtrl;
   late AnimationController _progressCtrl;
-  late AnimationController _pulseCtrl;
+  late AnimationController _glowCtrl;
 
   @override
   void initState() {
@@ -28,22 +27,26 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
+
     _ringCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 3),
     )..repeat();
+
+    _glowCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
     _textCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
+
     _progressCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2600),
+      duration: const Duration(milliseconds: 2500),
     );
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
 
     _run();
   }
@@ -55,19 +58,18 @@ class _SplashScreenState extends State<SplashScreen>
     _textCtrl.forward();
     await Future.delayed(const Duration(milliseconds: 300));
     _progressCtrl.forward();
-    await Future.delayed(const Duration(milliseconds: 2400));
+    await Future.delayed(const Duration(milliseconds: 2200));
     if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 700),
-        pageBuilder: (_, __, ___) => const LoginScreen(),
-        transitionsBuilder: (_, animation, __, child) {
+        pageBuilder: (_, a, __) => const LoginScreen(),
+        transitionsBuilder: (_, a, __, child) {
           return FadeTransition(
-            opacity: animation,
+            opacity: a,
             child: ScaleTransition(
-              scale: Tween(begin: 1.06, end: 1.0).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-              ),
+              scale: Tween(begin: 1.05, end: 1.0).animate(a),
               child: child,
             ),
           );
@@ -82,17 +84,16 @@ class _SplashScreenState extends State<SplashScreen>
     _ringCtrl.dispose();
     _textCtrl.dispose();
     _progressCtrl.dispose();
-    _pulseCtrl.dispose();
+    _glowCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       body: AnimatedBackground(
-        intensity: 1.6,
+        intensity: 1.5,
         blobCount: 8,
         child: Container(
           decoration: BoxDecoration(
@@ -100,7 +101,7 @@ class _SplashScreenState extends State<SplashScreen>
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                scheme.background.withOpacity(0.35),
+                scheme.background.withOpacity(0.4),
                 scheme.background,
               ],
             ),
@@ -110,7 +111,7 @@ class _SplashScreenState extends State<SplashScreen>
               children: [
                 const Spacer(flex: 2),
                 _buildAnimatedLogo(scheme),
-                const SizedBox(height: 44),
+                const SizedBox(height: 40),
                 _buildText(scheme),
                 const Spacer(),
                 _buildProgress(scheme),
@@ -123,7 +124,8 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  // ==================== لوگوی متحرک ====================
+  // ==================== لوگوی متحرک با تصویر اصلی ====================
+
   Widget _buildAnimatedLogo(ColorScheme scheme) {
     return SizedBox(
       width: 240,
@@ -131,45 +133,41 @@ class _SplashScreenState extends State<SplashScreen>
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // حلقه‌های منتشر شونده
+          // حلقه‌های چرخان پشت لوگو
           AnimatedBuilder(
             animation: _ringCtrl,
-            builder: (_, __) => CustomPaint(
-              size: const Size(240, 240),
-              painter: _RingsPainter(
-                t: _ringCtrl.value,
-                color: scheme.secondary,
-              ),
-            ),
+            builder: (_, __) {
+              return CustomPaint(
+                size: const Size(240, 240),
+                painter: _RingsPainter(
+                  t: _ringCtrl.value,
+                  color: scheme.secondary,
+                ),
+              );
+            },
           ),
 
-          // ذرات چرخان
-          ...List.generate(10, (i) {
+          // ذرات چرخان دور لوگو
+          ...List.generate(8, (i) {
             return AnimatedBuilder(
               animation: _ringCtrl,
               builder: (_, __) {
                 final angle = (_ringCtrl.value * math.pi * 2) +
-                    (i * math.pi * 2 / 10);
-                final radius =
-                    100 + math.sin(_ringCtrl.value * math.pi * 4 + i) * 10;
-                final size = i.isEven ? 8.0 : 6.0;
-                final opacity = i.isEven ? 0.85 : 0.55;
+                    (i * math.pi * 2 / 8);
+                final r = 105 +
+                    math.sin(_ringCtrl.value * math.pi * 4 + i) * 8;
                 return Transform.translate(
-                  offset: Offset(
-                    math.cos(angle) * radius,
-                    math.sin(angle) * radius,
-                  ),
+                  offset: Offset(math.cos(angle) * r, math.sin(angle) * r),
                   child: Container(
-                    width: size,
-                    height: size,
+                    width: 8,
+                    height: 8,
                     decoration: BoxDecoration(
-                      color: scheme.secondary.withOpacity(opacity),
+                      color: scheme.secondary.withOpacity(0.8),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
                           color: scheme.secondary.withOpacity(0.6),
-                          blurRadius: 10,
-                          spreadRadius: 1,
+                          blurRadius: 8,
                         ),
                       ],
                     ),
@@ -179,61 +177,72 @@ class _SplashScreenState extends State<SplashScreen>
             );
           }),
 
-          // هاله پالس‌دار
+          // هاله نورانی پشت لوگو
           AnimatedBuilder(
-            animation: _pulseCtrl,
-            builder: (_, __) => Container(
-              width: 130 + _pulseCtrl.value * 20,
-              height: 130 + _pulseCtrl.value * 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: scheme.primary
-                        .withOpacity(0.35 - _pulseCtrl.value * 0.25),
-                    blurRadius: 40 + _pulseCtrl.value * 20,
-                    spreadRadius: 4 + _pulseCtrl.value * 8,
-                  ),
-                ],
-              ),
-            ),
+            animation: _glowCtrl,
+            builder: (_, __) {
+              return Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: scheme.primary
+                          .withOpacity(0.3 + _glowCtrl.value * 0.3),
+                      blurRadius: 40 + _glowCtrl.value * 20,
+                      spreadRadius: 4 + _glowCtrl.value * 6,
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
 
-          // لوگوی اصلی
+          // 🌟 لوگوی اصلی اپلیکیشن
           ScaleTransition(
             scale: CurvedAnimation(
               parent: _logoCtrl,
               curve: Curves.elasticOut,
             ),
-            child: Container(
-              width: 130,
-              height: 130,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    scheme.primary,
-                    scheme.primary.withOpacity(0.7),
+            child: FadeTransition(
+              opacity: _logoCtrl,
+              child: Container(
+                width: 140,
+                height: 140,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white,
+                      Colors.white.withOpacity(0.95),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: scheme.primary.withOpacity(0.4),
+                    width: 3,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: scheme.primary.withOpacity(0.35),
+                      blurRadius: 30,
+                      spreadRadius: 2,
+                    ),
                   ],
                 ),
-                border: Border.all(
-                  color: scheme.secondary.withOpacity(0.4),
-                  width: 3,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: scheme.primary.withOpacity(0.5),
-                    blurRadius: 40,
-                    spreadRadius: 4,
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => Icon(
+                      Icons.school_rounded,
+                      size: 70,
+                      color: scheme.primary,
+                    ),
                   ),
-                ],
-              ),
-              child: FadeTransition(
-                opacity: _logoCtrl,
-                child: const Icon(
-                  Icons.menu_book_rounded,
-                  size: 65,
-                  color: Colors.white,
                 ),
               ),
             ),
@@ -243,7 +252,8 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  // ==================== متن ====================
+  // ==================== متن‌ها ====================
+
   Widget _buildText(ColorScheme scheme) {
     return FadeTransition(
       opacity: CurvedAnimation(parent: _textCtrl, curve: Curves.easeOut),
@@ -255,103 +265,119 @@ class _SplashScreenState extends State<SplashScreen>
           parent: _textCtrl,
           curve: Curves.easeOutCubic,
         )),
-        child: Column(
-          children: [
-            Text(
-              'کتابخانه',
-              style: GoogleFonts.vazirmatn(
-                fontSize: 36,
-                fontWeight: FontWeight.w900,
-                color: scheme.onBackground,
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 6),
-            ShaderMask(
-              shaderCallback: (r) => LinearGradient(
-                colors: [
-                  scheme.primary,
-                  scheme.secondary,
-                  scheme.primary,
-                ],
-              ).createShader(r),
-              child: Text(
-                'شهید حاج قاسم سلیمانی',
-                style: GoogleFonts.vazirmatn(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 40,
-                  height: 1,
-                  color: scheme.primary.withOpacity(0.4),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'راهِ شهید، راهِ دانایی',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              // نام اصلی کتابخانه
+              ShaderMask(
+                shaderCallback: (r) => LinearGradient(
+                  colors: [
+                    scheme.primary,
+                    scheme.secondary,
+                    scheme.primary,
+                  ],
+                ).createShader(r),
+                child: Text(
+                  'کتابخانه شهید بهشتی',
                   style: GoogleFonts.vazirmatn(
-                    fontSize: 13,
-                    color: scheme.onBackground.withOpacity(0.6),
-                    fontStyle: FontStyle.italic,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1,
+                    height: 1.3,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // نام کامل مدرسه
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: scheme.primary.withOpacity(0.15),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Container(
-                  width: 40,
-                  height: 1,
-                  color: scheme.primary.withOpacity(0.4),
+                child: Text(
+                  'مدرسه استعداد های درخشان شهید بهشتی\nناحیه ۲ شهرری - متوسطه اول',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.vazirmatn(
+                    fontSize: 12,
+                    color: scheme.onBackground.withOpacity(0.75),
+                    height: 1.6,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ],
-            ),
-          ],
+              ),
+
+              const SizedBox(height: 14),
+
+              // شعار
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.auto_stories_rounded,
+                    size: 14,
+                    color: scheme.primary.withOpacity(0.6),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'راهِ دانایی، راهِ آینده',
+                    style: GoogleFonts.vazirmatn(
+                      fontSize: 13,
+                      color: scheme.onBackground.withOpacity(0.55),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   // ==================== نوار پیشرفت ====================
+
   Widget _buildProgress(ColorScheme scheme) {
     return FadeTransition(
       opacity: _progressCtrl,
       child: Column(
         children: [
           SizedBox(
-            width: 200,
-            height: 5,
+            width: 180,
+            height: 4,
             child: AnimatedBuilder(
               animation: _progressCtrl,
-              builder: (_, __) => CustomPaint(
-                painter: _ProgressPainter(
-                  value: _progressCtrl.value,
-                  color: scheme.primary,
-                  secondary: scheme.secondary,
-                  bg: scheme.onBackground.withOpacity(0.08),
-                ),
-              ),
+              builder: (_, __) {
+                return CustomPaint(
+                  painter: _ProgressPainter(
+                    value: _progressCtrl.value,
+                    color: scheme.primary,
+                    bg: scheme.onBackground.withOpacity(0.1),
+                  ),
+                );
+              },
             ),
           ),
-          const SizedBox(height: 18),
-          AnimatedBuilder(
-            animation: _progressCtrl,
-            builder: (_, __) {
-              final dots = (_progressCtrl.value * 10).floor().clamp(1, 3);
-              return Text(
-                'در حال آماده‌سازی${'.' * dots}',
-                style: GoogleFonts.vazirmatn(
-                  fontSize: 12,
-                  color: scheme.onBackground.withOpacity(0.5),
-                  letterSpacing: 0.5,
-                ),
-              );
-            },
+          const SizedBox(height: 16),
+          Text(
+            'در حال آماده‌سازی کتابخانه...',
+            style: GoogleFonts.vazirmatn(
+              fontSize: 12,
+              color: scheme.onBackground.withOpacity(0.5),
+              letterSpacing: 0.5,
+            ),
           ),
         ],
       ),
@@ -359,7 +385,8 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-// ==================== Painter ها ====================
+// ==================== Painters ====================
+
 class _RingsPainter extends CustomPainter {
   final double t;
   final Color color;
@@ -372,13 +399,11 @@ class _RingsPainter extends CustomPainter {
     for (int i = 0; i < 3; i++) {
       final progress = (t + i / 3) % 1.0;
       final radius = 45 + progress * 75;
-      final opacity = (1 - progress) * 0.55;
-
+      final opacity = (1 - progress) * 0.6;
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
         ..color = color.withOpacity(opacity);
-
       canvas.drawCircle(center, radius, paint);
     }
   }
@@ -390,13 +415,11 @@ class _RingsPainter extends CustomPainter {
 class _ProgressPainter extends CustomPainter {
   final double value;
   final Color color;
-  final Color secondary;
   final Color bg;
 
   _ProgressPainter({
     required this.value,
     required this.color,
-    required this.secondary,
     required this.bg,
   });
 
@@ -407,37 +430,17 @@ class _ProgressPainter extends CustomPainter {
       Radius.circular(size.height / 2),
     );
     canvas.drawRRect(r, Paint()..color = bg);
-
-    final fillRect = Rect.fromLTWH(
-      0,
-      0,
-      size.width * value,
-      size.height,
-    );
     final fill = RRect.fromRectAndRadius(
-      fillRect,
+      Rect.fromLTWH(0, 0, size.width * value, size.height),
       Radius.circular(size.height / 2),
     );
-
     canvas.drawRRect(
       fill,
       Paint()
         ..shader = LinearGradient(
-          colors: [color, secondary],
-        ).createShader(fillRect),
+          colors: [color, color.withOpacity(0.6)],
+        ).createShader(fill.outerRect),
     );
-
-    // دایره درخشان در نوک نوار
-    if (value > 0.02) {
-      final x = size.width * value;
-      canvas.drawCircle(
-        Offset(x, size.height / 2),
-        size.height / 2 + 3,
-        Paint()
-          ..color = Colors.white.withOpacity(0.9)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-      );
-    }
   }
 
   @override
