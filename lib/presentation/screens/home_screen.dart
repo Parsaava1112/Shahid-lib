@@ -16,6 +16,7 @@ import 'book_detail_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'achievements_screen.dart';
+import 'leaderboard_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -56,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (serverAvailable) {
           debugPrint('📚 Server available, fetching books...');
           books = await ApiService.fetchBooksAndCache();
-          debugPrint('📚 Books from server (with local IDs): ${books.length}');
+          debugPrint('📚 Books from server: ${books.length}');
         } else {
           debugPrint('⚠️ Server not available, using local DB');
         }
@@ -68,10 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
         books = await DBHelper.getAllBooks();
         debugPrint('📚 Books from local DB: ${books.length}');
       }
-
-      // ⚠️ حذف seed SampleData که باعث اشتباه می‌شد
-      // اگر هیچ کتابی نبود، لیست خالی بمان
-      // (کاربر می‌تواند با همگام‌سازی، کتاب‌ها را از سرور بگیرد)
 
       final user = await ApiService.getCurrentUser();
 
@@ -89,9 +86,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         _books = books;
-        _applyFilter();
         _user = user;
         _stats = stats;
+        _applyFilter();
         _loading = false;
       });
     } catch (e) {
@@ -133,6 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int get _level => AchievementService.levelForXp(_xp);
 
   Future<void> _manualSync() async {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -155,23 +153,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await _loadAll();
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white),
-              const SizedBox(width: 10),
-              Text(
-                '${_books.length} اثر بارگذاری شد',
-                style: GoogleFonts.vazirmatn(),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.green.shade700,
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white),
+            const SizedBox(width: 10),
+            Text(
+              '${_books.length} اثر بارگذاری شد',
+              style: GoogleFonts.vazirmatn(),
+            ),
+          ],
         ),
-      );
-    }
+        backgroundColor: Colors.green.shade700,
+      ),
+    );
   }
 
   @override
@@ -184,6 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: _manualSync,
         backgroundColor: theme.colorScheme.primary,
+        tooltip: 'همگام‌سازی با سرور',
         child: const Icon(Icons.sync_rounded, color: Colors.white),
       ),
       body: AnimatedBackground(
@@ -210,6 +208,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  // ==================== AppBar ====================
 
   Widget _buildAppBar(ThemeData theme, ThemeController themeController) {
     return SliverAppBar(
@@ -284,6 +284,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ==================== Welcome Banner ====================
+
   Widget _buildWelcomeBanner(ThemeData theme) {
     final xpInLevel = AchievementService.xpInCurrentLevel(_xp).toDouble();
     final xpNeeded = AchievementService.xpForLevel(_level).toDouble();
@@ -351,12 +353,35 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+                  // دکمه دستاوردها
                   InkWell(
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => const AchievementsScreen(),
+                        ),
+                      ).then((_) => _loadAll());
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.workspace_premium_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // دکمه لیدربورد
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LeaderboardScreen(),
                         ),
                       ).then((_) => _loadAll());
                     },
@@ -400,6 +425,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  // ==================== Stats Row ====================
 
   Widget _buildStatsRow(ThemeData theme) {
     final booksRead = (_stats['total_books_read'] as num?)?.toInt() ?? 0;
@@ -490,6 +517,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ==================== Category Chips ====================
+
   Widget _buildCategoryChips(ThemeData theme) {
     return SliverToBoxAdapter(
       child: SizedBox(
@@ -530,6 +559,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  // ==================== Book List ====================
 
   Widget _buildBookList(ThemeData theme) {
     if (_filteredBooks.isEmpty) {
@@ -572,7 +603,6 @@ class _HomeScreenState extends State<HomeScreen> {
         itemBuilder: (context, i) {
           final book = _filteredBooks[i];
           return _BookCard(
-            // 🔑 کلید یکتا بر اساس ID محلی کتاب
             key: ValueKey('book_card_${book.id}'),
             book: book,
             index: i,
@@ -580,11 +610,9 @@ class _HomeScreenState extends State<HomeScreen> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  // 🔑 پاس دادن همان کتاب با ID محلی درست
                   builder: (_) => BookDetailScreen(book: book),
                 ),
               );
-              // 🔄 بعد از بازگشت، لیست را رفرش کن (برای وضعیت دانلود)
               await _loadAll();
             },
           );
@@ -652,7 +680,6 @@ class _BookCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // 🔑 Hero tag یکتا بر اساس ID محلی
                 Hero(
                   tag: 'book_cover_${book.id}',
                   child: BookCover(

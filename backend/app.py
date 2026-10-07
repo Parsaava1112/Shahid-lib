@@ -452,6 +452,11 @@ def join_circle(circle_id):
 # ==================== ۱۲. جدول امتیازات ====================
 @app.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
+    """
+    دریافت جدول امتیازات
+    - period: 'weekly', 'monthly', 'all'
+    - بر اساس مجموع دقایق مطالعه مرتب می‌شود
+    """
     period = request.args.get('period', 'weekly')
 
     if period == 'weekly':
@@ -461,36 +466,72 @@ def get_leaderboard():
     else:
         start = datetime(2000, 1, 1)
 
+    # ---- آمار هر کاربر ----
     results = (
         db.session.query(
             User.id,
             User.name,
+            User.national_code,
             User.avatar_seed,
-            db.func.sum(UserActivity.minutes_read).label('total_minutes'),
-            db.func.count(UserActivity.id).label('books_count'),
+            User.avatar_style,
+            db.func.coalesce(
+                db.func.sum(UserActivity.minutes_read), 0
+            ).label('total_minutes'),
+            db.func.count(
+                db.func.distinct(UserActivity.book_id)
+            ).label('books_count'),
         )
         .join(UserActivity, User.id == UserActivity.user_id)
         .filter(UserActivity.last_activity >= start)
         .group_by(User.id)
         .order_by(db.desc('total_minutes'))
-        .limit(20)
+        .limit(100)
         .all()
     )
 
-    leaderboard = [
-        {
+    leaderboard = []
+    for i, r in enumerate(results):
+        minutes = r.total_minutes or 0
+        books = r.books_count or 0
+
+        # سطح بر اساس XP
+        xp = (books * 100) + (minutes // 10) + 0
+        level = 1
+        remaining = xp
+        while remaining >= (100 + (level - 1) * 50):
+            remaining -= (100 + (level - 1) * 50)
+            level += 1
+
+        # نشان‌ها
+        badges = []
+        if books >= 1:
+            badges.append({'icon': '📖', 'name': 'شروع‌کننده'})
+        if books >= 5:
+            badges.append({'icon': '📚', 'name': 'کتاب‌خوان'})
+        if books >= 20:
+            badges.append({'icon': '🍽️', 'name': 'کتاب‌خوار'})
+        if books >= 50:
+            badges.append({'icon': '💎', 'name': 'کتاب‌دوست'})
+        if minutes >= 600:
+            badges.append({'icon': '⌛', 'name': 'ده ساعت'})
+        if minutes >= 3000:
+            badges.append({'icon': '🏅', 'name': 'پنجاه ساعت'})
+
+        leaderboard.append({
             'rank': i + 1,
             'user_id': r.id,
             'name': r.name,
-            'avatar_seed': r.avatar_seed,
-            'total_minutes': r.total_minutes or 0,
-            'books_count': r.books_count,
-        }
-        for i, r in enumerate(results)
-    ]
+            'national_code': r.national_code,
+            'avatar_seed': r.avatar_seed or r.national_code,
+            'avatar_style': r.avatar_style or 'adventurer',
+            'total_minutes': minutes,
+            'books_count': books,
+            'xp': xp,
+            'level': level,
+            'badges': badges[:3],  # فقط ۳ نشان اول
+        })
 
     return jsonify(leaderboard), 200
-
 
 # ==================== ۱۳. هوش مصنوعی ====================
 @app.route('/api/ai/recommendations/<int:user_id>', methods=['GET'])

@@ -235,8 +235,6 @@ class ApiService {
 
   // ==================== کتاب‌ها ====================
 
-  /// دریافت کتاب‌ها از سرور و ذخیره در دیتابیس محلی
-  /// 🔑 برگرداندن لیست با ID محلی (نه سرور)
   static Future<List<BookModel>> fetchBooksAndCache({
     String? type,
     String? category,
@@ -260,7 +258,6 @@ class ApiService {
         debugPrint('📚 Saved ${serverBooks.length} books to local DB');
       }
 
-      // 🔑 مهم: همیشه از دیتابیس محلی بخوان تا ID محلی داشته باشی
       final localBooks = await DBHelper.getAllBooks();
       debugPrint('📚 Returning ${localBooks.length} books (local IDs)');
       return localBooks;
@@ -270,38 +267,30 @@ class ApiService {
     }
   }
 
-  /// ذخیره کتاب‌ها در دیتابیس محلی
-  /// کتاب‌های موجود را آپدیت می‌کند، کتاب‌های جدید را درج می‌کند
   static Future<void> _saveBooksLocally(List<BookModel> serverBooks) async {
     for (final serverBook in serverBooks) {
       try {
-        // پیدا کردن کتاب با همین عنوان در دیتابیس محلی
         final existing = await DBHelper.findBookByTitle(serverBook.title);
 
         if (existing != null) {
-          // کتاب موجود → فقط اطلاعات غیرمحلی را آپدیت کن
           final updated = BookModel(
-            // 🔑 ID محلی را نگه دار
             id: existing.id,
             title: serverBook.title,
             author: serverBook.author,
             description: serverBook.description,
             coverUrl: serverBook.coverUrl,
             fileUrl: serverBook.fileUrl,
-            // 🔑 مسیر فایل دانلود شده را نگه دار
             filePath: existing.filePath,
             fileSize: serverBook.fileSize,
             type: serverBook.type,
             category: serverBook.category,
             rating: serverBook.rating,
             ratingCount: serverBook.ratingCount,
-            // 🔑 وضعیت دانلود را نگه دار
             isDownloaded: existing.isDownloaded,
             downloadedAt: existing.downloadedAt,
           );
           await DBHelper.updateBook(updated);
         } else {
-          // کتاب جدید → درج کن
           await DBHelper.insertBook(serverBook);
         }
       } catch (e) {
@@ -414,10 +403,10 @@ class ApiService {
   static String _getLocalMotivationalMessage() {
     final messages = [
       'امروز یه کتاب خوب بخون. حتی ۱۰ دقیقه.',
-      'شهید سلیمانی می‌فرمود: «هرچه داریم از کتاب و مطالعه است.»',
       'کتاب بهترین دوستیه که هیچ‌وقت تنهات نمی‌ذاره.',
       'با هر صفحه‌ای که می‌خونی، یه پله بالاتر می‌ری.',
       'دانش سلاح امروزه. با کتاب مسلح شو.',
+      'هر روز یک صفحه، سالی یک کتاب.',
     ];
     messages.shuffle();
     return messages.first;
@@ -477,6 +466,7 @@ class ApiService {
       final data = _handleResponse(response) as List;
       return data.cast<Map<String, dynamic>>();
     } catch (e) {
+      debugPrint('❌ fetchLeaderboard error: $e');
       return [];
     }
   }
