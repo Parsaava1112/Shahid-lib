@@ -17,14 +17,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ==================== ۲. راه‌اندازی Java ====================
+      # ==================== ۲. بررسی فایل‌های امضا ====================
+      - name: Verify signing files
+        run: |
+          echo "🔍 Checking keystore files..."
+          if [ -f "android/app/upload-keystore.jks" ]; then
+            echo "✅ Keystore found: android/app/upload-keystore.jks"
+            ls -lh android/app/upload-keystore.jks
+          else
+            echo "❌ Keystore NOT found at android/app/upload-keystore.jks"
+            exit 1
+          fi
+
+          if [ -f "android/key.properties" ]; then
+            echo "✅ key.properties found"
+            cat android/key.properties
+          else
+            echo "❌ key.properties NOT found at android/key.properties"
+            exit 1
+          fi
+
+      # ==================== ۳. راه‌اندازی Java ====================
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # ==================== ۳. راه‌اندازی Flutter ====================
+      # ==================== ۴. راه‌اندازی Flutter ====================
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -32,25 +52,45 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # ==================== ۴. بررسی نسخه‌ها ====================
+      # ==================== ۵. بررسی نسخه‌ها ====================
       - name: Verify Flutter and Dart versions
         run: |
           flutter --version
           dart --version
 
-      # ==================== ۵. نصب وابستگی‌ها ====================
+      # ==================== ۶. نصب وابستگی‌ها ====================
       - name: Install dependencies
         run: flutter pub get
 
-      # ==================== ۷. ساخت APK واحد ====================
-      - name: Build single APK (release)
+      # ==================== ۷. ساخت APK امضا شده ====================
+      - name: Build signed APK (release)
         run: flutter build apk --release
 
-      # ==================== ۸. آپلود APK ====================
+      # ==================== ۸. بررسی امضای APK ====================
+      - name: Verify APK signature
+        run: |
+          echo "🔍 Verifying APK signature..."
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          if [ -f "$APK_PATH" ]; then
+            echo "✅ APK found: $APK_PATH"
+            ls -lh "$APK_PATH"
+            
+            # بررسی با apksigner
+            APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -n 1)
+            if [ -n "$APKSIGNER" ]; then
+              echo "🔐 Signer info:"
+              $APKSIGNER verify --print-certs "$APK_PATH" || echo "⚠️ apksigner check failed"
+            fi
+          else
+            echo "❌ APK not found!"
+            exit 1
+          fi
+
+      # ==================== ۹. آپلود APK ====================
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: shahid-suleimani-library-apk
+          name: shahid-beheshti-library-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
