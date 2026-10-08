@@ -11,6 +11,20 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
+        // ─── میرورهای ایرانی (اولویت اول) ───────────────────────
+        maven { url = uri("https://maven.myket.ir") }
+        maven { url = uri("https://maven.devneeds.ir") }
+        maven { url = uri("https://gradle.iranrepo.ir") }
+        maven { url = uri("https://gradle.jamko.ir") }
+        maven { url = uri("https://en-mirror.ir") }
+        maven { url = uri("https://archive.ito.gov.ir/gradle/maven-plugin/") }
+
+        // ─── میرورهای چین (Aliyun) ──────────────────────────────
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+
+        // ─── مخازن رسمی (Fallback) ──────────────────────────────
         google()
         mavenCentral()
         gradlePluginPortal()
