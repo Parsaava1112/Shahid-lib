@@ -33,11 +33,13 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   String _selectedCategory = 'همه';
 
+  // 👇 اضافه شدن «کتاب انگلیسی» به لیست دسته‌بندی‌ها
   final List<String> _categories = [
     'همه',
     'کتاب',
     'کتاب صوتی',
     'پادکست تصویری',
+    'کتاب انگلیسی',
   ];
 
   @override
@@ -97,9 +99,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // 👇 فیلتر بر اساس دسته‌بندی جدید
   void _applyFilter() {
     if (_selectedCategory == 'همه') {
       _filteredBooks = List.from(_books);
+    } else if (_selectedCategory == 'کتاب انگلیسی') {
+      // فیلتر بر اساس زبان انگلیسی
+      _filteredBooks = _books
+          .where((b) => b.language == 'en')
+          .toList();
     } else {
       final type = _getTypeFromCategory(_selectedCategory);
       _filteredBooks = _books.where((b) => b.type == type).toList();
@@ -530,24 +538,44 @@ class _HomeScreenState extends State<HomeScreen> {
           itemBuilder: (context, i) {
             final cat = _categories[i];
             final active = _selectedCategory == cat;
+            final isEnglish = cat == 'کتاب انگلیسی';
+
+            // 👇 رنگ متفاوت برای کتاب انگلیسی
+            final activeColor = isEnglish
+                ? const Color(0xFF1976D2)
+                : theme.colorScheme.primary;
+
             return Padding(
               padding: const EdgeInsets.only(left: 8, top: 8, bottom: 8),
               child: ChoiceChip(
-                label: Text(cat),
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // آیکون برای کتاب انگلیسی
+                    if (isEnglish) ...[
+                      Icon(
+                        Icons.language_rounded,
+                        size: 14,
+                        color: active ? Colors.white : activeColor,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(cat),
+                  ],
+                ),
                 selected: active,
                 onSelected: (_) => _filterBooks(cat),
                 labelStyle: GoogleFonts.vazirmatn(
-                  color:
-                      active ? Colors.white : theme.colorScheme.onSurface,
+                  color: active ? Colors.white : theme.colorScheme.onSurface,
                   fontWeight: active ? FontWeight.bold : FontWeight.normal,
                   fontSize: 13,
                 ),
-                selectedColor: theme.colorScheme.primary,
+                selectedColor: activeColor,
                 backgroundColor: theme.colorScheme.surface,
                 side: BorderSide(
                   color: active
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.primary.withOpacity(0.2),
+                      ? activeColor
+                      : activeColor.withOpacity(0.25),
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
@@ -570,12 +598,18 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.menu_book_outlined,
-                  size: 80,
-                  color: theme.colorScheme.primary.withOpacity(0.3)),
+              Icon(
+                _selectedCategory == 'کتاب انگلیسی'
+                    ? Icons.translate_rounded
+                    : Icons.menu_book_outlined,
+                size: 80,
+                color: theme.colorScheme.primary.withOpacity(0.3),
+              ),
               const SizedBox(height: 16),
               Text(
-                'کتابی یافت نشد',
+                _selectedCategory == 'کتاب انگلیسی'
+                    ? 'هنوز کتاب انگلیسی اضافه نشده'
+                    : 'کتابی یافت نشد',
                 style: GoogleFonts.vazirmatn(
                   fontSize: 16,
                   color: theme.colorScheme.onSurface.withOpacity(0.6),
@@ -637,6 +671,10 @@ class _BookCard extends StatelessWidget {
   });
 
   Color _color(ThemeData theme) {
+    // 👇 کتاب انگلیسی رنگ متفاوت
+    if (book.language == 'en') {
+      return const Color(0xFF1976D2);
+    }
     switch (book.type) {
       case 'pdf':
         return theme.colorScheme.primary;
@@ -653,6 +691,7 @@ class _BookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = _color(theme);
+    final isEnglish = book.language == 'en';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -682,12 +721,47 @@ class _BookCard extends StatelessWidget {
               children: [
                 Hero(
                   tag: 'book_cover_${book.id}',
-                  child: BookCover(
-                    book: book,
-                    width: 64,
-                    height: 84,
-                    radius: 14,
-                    baseUrl: ApiService.fileBaseUrl,
+                  child: Stack(
+                    children: [
+                      BookCover(
+                        book: book,
+                        width: 64,
+                        height: 84,
+                        radius: 14,
+                        baseUrl: ApiService.fileBaseUrl,
+                      ),
+                      // 👇 بج سطح برای کتاب‌های انگلیسی
+                      if (isEnglish && book.level != null)
+                        Positioned(
+                          bottom: 2,
+                          left: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Color(book.levelColorValue),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Color(book.levelColorValue)
+                                      .withOpacity(0.5),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              book.levelLabelFa,
+                              style: GoogleFonts.vazirmatn(
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -695,15 +769,29 @@ class _BookCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        book.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.vazirmatn(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                        ),
+                      Row(
+                        children: [
+                          if (isEnglish) ...[
+                            Icon(
+                              Icons.language_rounded,
+                              size: 14,
+                              color: color,
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Expanded(
+                            child: Text(
+                              book.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.vazirmatn(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(
