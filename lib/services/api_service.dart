@@ -238,12 +238,16 @@ class ApiService {
   static Future<List<BookModel>> fetchBooksAndCache({
     String? type,
     String? category,
+    String? language,
+    String? level,
   }) async {
     try {
       String endpoint = '/books';
       final params = <String>[];
       if (type != null) params.add('type=$type');
       if (category != null) params.add('category=$category');
+      if (language != null) params.add('language=$language');
+      if (level != null) params.add('level=$level');
       if (params.isNotEmpty) endpoint += '?${params.join('&')}';
 
       debugPrint('📚 Fetching books from: $baseUrl$endpoint');
@@ -284,6 +288,8 @@ class ApiService {
             fileSize: serverBook.fileSize,
             type: serverBook.type,
             category: serverBook.category,
+            language: serverBook.language,
+            level: serverBook.level,
             rating: serverBook.rating,
             ratingCount: serverBook.ratingCount,
             isDownloaded: existing.isDownloaded,
@@ -302,8 +308,15 @@ class ApiService {
   static Future<List<BookModel>> fetchBooks({
     String? type,
     String? category,
+    String? language,
+    String? level,
   }) async {
-    return fetchBooksAndCache(type: type, category: category);
+    return fetchBooksAndCache(
+      type: type,
+      category: category,
+      language: language,
+      level: level,
+    );
   }
 
   static Future<BookModel?> fetchBookDetail(int bookId) async {
@@ -314,6 +327,60 @@ class ApiService {
     } catch (e) {
       debugPrint('fetchBookDetail error: $e');
       return null;
+    }
+  }
+
+  // ==================== کتاب‌های انگلیسی ====================
+
+  /// دریافت کتاب‌های انگلیسی از سرور
+  static Future<List<BookModel>> fetchEnglishBooks({
+    String? level,
+  }) async {
+    try {
+      String endpoint = '/books?language=en';
+      if (level != null) endpoint += '&level=$level';
+
+      debugPrint('📚 Fetching English books: $baseUrl$endpoint');
+      final response = await _get(endpoint);
+      final data = _handleResponse(response) as List;
+      debugPrint('📚 Server returned ${data.length} English books');
+
+      final serverBooks = data.map((e) => BookModel.fromMap(e)).toList();
+
+      if (serverBooks.isNotEmpty) {
+        await _saveBooksLocally(serverBooks);
+      }
+
+      return await DBHelper.getEnglishBooks(level: level);
+    } catch (e) {
+      debugPrint('❌ fetchEnglishBooks error: $e');
+      return await DBHelper.getEnglishBooks(level: level);
+    }
+  }
+
+  /// دریافت لیست سطوح با تعداد
+  static Future<List<Map<String, dynamic>>> fetchEnglishLevels() async {
+    try {
+      final response = await _get('/english/levels');
+      final data = _handleResponse(response) as List;
+      return data.cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('❌ fetchEnglishLevels error: $e');
+      final counts = await DBHelper.getEnglishLevelCounts();
+      final labels = {
+        'beginner': 'مبتدی',
+        'elementary': 'پایه',
+        'intermediate': 'متوسط',
+        'upper': 'متوسط بالا',
+        'advanced': 'پیشرفته',
+      };
+      return labels.entries.map((e) {
+        return {
+          'key': e.key,
+          'label': e.value,
+          'count': counts[e.key] ?? 0,
+        };
+      }).toList();
     }
   }
 

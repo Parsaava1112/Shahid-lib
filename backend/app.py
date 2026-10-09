@@ -163,14 +163,70 @@ def register_fcm_token(user_id):
 def get_books():
     book_type = request.args.get('type')
     category = request.args.get('category')
+    language = request.args.get('language')  # 👈 جدید
+    level = request.args.get('level')         # 👈 جدید
 
     query = Book.query
     if book_type:
         query = query.filter_by(type=book_type)
     if category:
         query = query.filter_by(category=category)
+    if language:                              # 👈 جدید
+        query = query.filter_by(language=language)
+    if level:                                 # 👈 جدید
+        query = query.filter_by(level=level)
 
     books = query.order_by(Book.created_at.desc()).all()
+    return jsonify([b.to_dict() for b in books]), 200
+
+
+# 👈 اندپوینت جدید: دریافت لیست سطوح موجود
+@app.route('/api/english/levels', methods=['GET'])
+def get_english_levels():
+    """لیست سطوح موجود در کتاب‌های انگلیسی"""
+    levels = (
+        db.session.query(
+            Book.level,
+            db.func.count(Book.id).label('count'),
+        )
+        .filter(Book.language == 'en')
+        .filter(Book.level.isnot(None))
+        .group_by(Book.level)
+        .all()
+    )
+
+    # ترتیب استاندارد سطوح انگلیسی
+    order = ['beginner', 'elementary', 'intermediate', 'upper', 'advanced']
+    result = []
+    for lvl in order:
+        for l, count in levels:
+            if l == lvl:
+                result.append({
+                    'key': lvl,
+                    'label': _level_label_fa(lvl),
+                    'count': count,
+                })
+                break
+        else:
+            result.append({
+                'key': lvl,
+                'label': _level_label_fa(lvl),
+                'count': 0,
+            })
+
+    return jsonify(result), 200
+
+
+def _level_label_fa(level):
+    """تبدیل کلید سطح به برچسب فارسی"""
+    labels = {
+        'beginner': 'مبتدی',
+        'elementary': 'پایه',
+        'intermediate': 'متوسط',
+        'upper': 'متوسط بالا',
+        'advanced': 'پیشرفته',
+    }
+    return labels.get(level, level)()
     return jsonify([b.to_dict() for b in books]), 200
 
 

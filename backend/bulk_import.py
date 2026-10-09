@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 اسکریپت وارد کردن گروهی کتاب‌ها، پادکست‌ها، ویدیوها و کاورها
-به دیتابیس کتابخانه شهید حاج قاسم سلیمانی
+به دیتابیس کتابخانه شهید بهشتی
+مدرسه استعداد های درخشان شهید بهشتی - ناحیه ۲ شهرری - متوسطه اول
 
 نحوه استفاده:
     1. فایل‌های خود را در پوشه assets/ قرار دهید
@@ -30,14 +31,33 @@ DEST_AUDIO = os.path.join(UPLOAD_DIR, 'audio')
 DEST_VIDEO = os.path.join(UPLOAD_DIR, 'video')
 DEST_COVERS = os.path.join(UPLOAD_DIR, 'covers')
 
+# ==========================================================
+# ⚙️ لیست رسانه‌ها
+# ==========================================================
+#
+# فیلدهای موجود:
+#   title       : عنوان (اجباری)
+#   author      : نویسنده / راوی / تهیه‌کننده
+#   description : توضیحات
+#   type        : 'pdf' یا 'audio' یا 'video'
+#   category    : دسته‌بندی ('کتاب', 'کتاب صوتی', 'پادکست تصویری', 'کتاب انگلیسی')
+#   language    : 'fa' برای فارسی، 'en' برای انگلیسی (پیش‌فرض: 'fa')
+#   level       : برای کتاب‌های انگلیسی: 'beginner', 'elementary',
+#                 'intermediate', 'upper', 'advanced'
+#   file        : نام فایل داخل پوشه assets/books یا audio یا video
+#   cover       : نام فایل کاور در assets/covers (اختیاری)
+#
+# ==========================================================
+
 MEDIA_LIST = [
-    # ============ کتاب‌ها (PDF) ============
+    # ============ کتاب‌های فارسی ============
     {
         'title': 'بینوایان جلد دوم',
         'author': 'ویکتور هوگو',
         'description': 'مجموعه‌ای از داستان دختری در فرانسه.',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'b.pdf',
         'cover': 'b.jfif',
     },
@@ -47,6 +67,7 @@ MEDIA_LIST = [
         'description': 'داستانی از مردی در دریا',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'man.pdf',
         'cover': 'man.jfif',
     },
@@ -56,6 +77,7 @@ MEDIA_LIST = [
         'description': 'دراکولا',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'dar.pdf',
         'cover': 'dar.jfif',
     },
@@ -65,6 +87,7 @@ MEDIA_LIST = [
         'description': 'داستانی زیبا از ژول ورن',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'dor.pdf',
         'cover': 'dor.jfif',
     },
@@ -74,6 +97,7 @@ MEDIA_LIST = [
         'description': 'داستانی از حیوانات',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'animal.pdf',
         'cover': 'animal.jfif',
     },
@@ -83,6 +107,7 @@ MEDIA_LIST = [
         'description': 'داستانی از کتابخانه',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'lib.pdf',
         'cover': 'lib.jfif',
     },
@@ -92,6 +117,7 @@ MEDIA_LIST = [
         'description': 'داستانی از یک مرد',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'far.pdf',
         'cover': 'fan.jfif',
     },
@@ -101,6 +127,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har1.pdf',
         'cover': 'har1.jfif',
     },
@@ -110,6 +137,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har2.pdf',
         'cover': 'har2.jfif',
     },
@@ -119,6 +147,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har3.pdf',
         'cover': 'har2.jfif',
     },
@@ -128,6 +157,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har4.pdf',
         'cover': 'har3.jfif',
     },
@@ -137,6 +167,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har5.pdf',
         'cover': 'har4.jfif',
     },
@@ -146,6 +177,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har6.pdf',
         'cover': 'har5.jfif',
     },
@@ -155,6 +187,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har7.pdf',
         'cover': 'har6.jfif',
     },
@@ -164,6 +197,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har8.pdf',
         'cover': 'har7.jfif',
     },
@@ -173,6 +207,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har9.pdf',
         'cover': 'har7.jfif',
     },
@@ -182,6 +217,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har10.pdf',
         'cover': 'har7.jfif',
     },
@@ -191,6 +227,7 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har11.pdf',
         'cover': 'har8.jfif',
     },
@@ -200,9 +237,25 @@ MEDIA_LIST = [
         'description': 'داستانی های هری پاتر',
         'type': 'pdf',
         'category': 'کتاب',
+        'language': 'fa',
         'file': 'har12.pdf',
         'cover': 'har8.jfif',
     },
+
+    # ============ 📘 کتاب‌های انگلیسی ============
+    # برای اضافه کردن، این الگو را کپی کنید:
+    #
+    # {
+    #     'title': 'The Little Prince',
+    #     'author': 'Antoine de Saint-Exupéry',
+    #     'description': 'شازده کوچولو',
+    #     'type': 'pdf',
+    #     'category': 'کتاب انگلیسی',
+    #     'language': 'en',
+    #     'level': 'beginner',   # یکی از: beginner, elementary, intermediate, upper, advanced
+    #     'file': 'little_prince.pdf',
+    #     'cover': 'little_prince.jpg',
+    # },
 ]
 
 
@@ -216,7 +269,7 @@ def ensure_folders():
         os.makedirs(path, exist_ok=True)
 
 
-def safe_copy(src: str, dst_dir: str) -> tuple[str, int]:
+def safe_copy(src: str, dst_dir: str) -> tuple:
     """
     کپی امن فایل با نام یکتا.
     برمی‌گرداند: (مسیر نهایی, حجم به بایت)
@@ -246,7 +299,6 @@ def find_asset_file(filename: str, type_: str) -> str:
 
     path = os.path.join(folder, filename)
     if not os.path.exists(path):
-        # جستجوی case-insensitive
         if os.path.isdir(folder):
             for f in os.listdir(folder):
                 if f.lower() == filename.lower():
@@ -273,14 +325,12 @@ def find_cover_file(filename: str) -> str:
 def import_to_database(items):
     """وارد کردن آیتم‌ها به دیتابیس با استفاده از Flask-SQLAlchemy"""
 
-    # اضافه کردن مسیر backend به sys.path
     sys.path.insert(0, BASE_DIR)
 
     from app import app
     from models import db, Book
 
     with app.app_context():
-        # جداول را بساز (اگر نیست)
         db.create_all()
 
         added = 0
@@ -304,6 +354,8 @@ def import_to_database(items):
             cover_name = item.get('cover', '').strip()
             type_ = item.get('type', 'pdf')
             category = item.get('category', '')
+            language = item.get('language', 'fa')
+            level = item.get('level')
 
             try:
                 # ---- کپی فایل اصلی ----
@@ -355,13 +407,19 @@ def import_to_database(items):
                     file_size=file_size,
                     type=type_,
                     category=category,
+                    language=language,
+                    level=level,
                 )
                 db.session.add(book)
                 db.session.commit()
 
                 added += 1
                 size_mb = file_size / (1024 * 1024)
-                print(f"  ✅ ثبت شد: {title} ({size_mb:.2f} MB)")
+                lang_info = f" [{language}"
+                if level:
+                    lang_info += f"/{level}"
+                lang_info += "]"
+                print(f"  ✅ ثبت شد: {title}{lang_info} ({size_mb:.2f} MB)")
 
             except Exception as e:
                 db.session.rollback()
@@ -377,17 +435,17 @@ def import_to_database(items):
 
 def main():
     print("=" * 60)
-    print("  📚 کتابخانه شهید حاج قاسم سلیمانی")
+    print("  📚 کتابخانه شهید بهشتی")
+    print("  🏫 مدرسه استعداد های درخشان شهید بهشتی")
+    print("  📍 ناحیه ۲ شهرری - متوسطه اول")
     print("  🚀 اسکریپت وارد کردن گروهی محتوا")
     print("=" * 60)
 
-    # بررسی پوشه assets
     if not os.path.exists(ASSETS_DIR):
         print(f"\n❌ پوشه assets یافت نشد: {ASSETS_DIR}")
         print("لطفاً پوشه assets را با زیرپوشه‌های books, audio, video, covers بسازید.")
         sys.exit(1)
 
-    # بررسی دیتابیس
     if not os.path.exists(DB_PATH):
         print(f"\n⚠️  دیتابیس یافت نشد: {DB_PATH}")
         print("دیتابیس به‌طور خودکار ساخته می‌شود...")

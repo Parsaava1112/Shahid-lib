@@ -8,7 +8,7 @@ import '../../data/models/rating_model.dart';
 class DBHelper {
   static Database? _database;
   static const String _dbName = 'shahid_library.db';
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
 
   // ==================== راه‌اندازی ====================
 
@@ -61,6 +61,8 @@ class DBHelper {
         file_size INTEGER DEFAULT 0,
         type TEXT NOT NULL,
         category TEXT,
+        language TEXT DEFAULT 'fa',
+        level TEXT,
         rating REAL DEFAULT 0,
         rating_count INTEGER DEFAULT 0,
         is_downloaded INTEGER DEFAULT 0,
@@ -137,6 +139,7 @@ class DBHelper {
     ''');
 
     await db.execute('CREATE INDEX idx_books_type ON books (type)');
+    await db.execute('CREATE INDEX idx_books_language ON books (language)');
     await db.execute('CREATE INDEX idx_ratings_book ON ratings (book_id)');
     await db.execute(
         'CREATE INDEX idx_activities_user ON user_activities (user_id)');
@@ -201,6 +204,20 @@ class DBHelper {
         ''');
       } catch (_) {}
     }
+
+    if (oldVersion < 3) {
+      try {
+        await db.execute(
+            "ALTER TABLE books ADD COLUMN language TEXT DEFAULT 'fa'");
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE books ADD COLUMN level TEXT');
+      } catch (_) {}
+      try {
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_books_language ON books (language)');
+      } catch (_) {}
+    }
   }
 
   // ==================== کاربران ====================
@@ -208,14 +225,12 @@ class DBHelper {
   static Future<int> insertUser(UserModel user) async {
     final db = await database;
     final map = user.toMap();
-    map.remove('id'); // برای جلوگیری از conflict
+    map.remove('id');
     map['created_at'] = DateTime.now().toIso8601String();
 
-    // بررسی وجود کاربر با این کد ملی
     if (user.nationalCode.isNotEmpty) {
       final existing = await getUserByNationalCode(user.nationalCode);
       if (existing != null) {
-        // اگر هست، آپدیت کن
         final updated = UserModel(
           id: existing.id,
           name: user.name,
@@ -344,7 +359,6 @@ class DBHelper {
     return null;
   }
 
-  /// پیدا کردن کتاب بر اساس عنوان (برای sync)
   static Future<BookModel?> findBookByTitle(String title) async {
     final db = await database;
     final maps = await db.query(
@@ -391,6 +405,43 @@ class DBHelper {
   static Future<void> deleteAllBooks() async {
     final db = await database;
     await db.delete('books');
+  }
+
+  // ==================== کتاب‌های انگلیسی ====================
+
+  /// دریافت کتاب‌های انگلیسی (با فیلتر اختیاری سطح)
+  static Future<List<BookModel>> getEnglishBooks({String? level}) async {
+    final db = await database;
+    final where = <String>['language = ?'];
+    final args = <dynamic>['en'];
+
+    if (level != null && level.isNotEmpty) {
+      where.add('level = ?');
+      args.add(level);
+    }
+
+    final maps = await db.query(
+      'books',
+      where: where.join(' AND '),
+      whereArgs: args,
+      orderBy: 'title ASC',
+    );
+    return maps.map((e) => BookModel.fromMap(e)).toList();
+  }
+
+  /// تعداد کتاب‌ها در هر سطح
+  static Future<Map<String, int>> getEnglishLevelCounts() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT level, COUNT(*) as count FROM books "
+      "WHERE language = 'en' AND level IS NOT NULL "
+      "GROUP BY level",
+    );
+    final map = <String, int>{};
+    for (final row in result) {
+      map[row['level'] as String] = (row['count'] as num).toInt();
+    }
+    return map;
   }
 
   // ==================== امتیازات ====================

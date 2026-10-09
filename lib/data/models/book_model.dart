@@ -9,6 +9,8 @@ class BookModel {
   final int fileSize;
   final String type;
   final String category;
+  final String language;   // 👈 جدید
+  final String? level;      // 👈 جدید
   final double rating;
   final int ratingCount;
   final bool isDownloaded;
@@ -25,13 +27,14 @@ class BookModel {
     this.fileSize = 0,
     required this.type,
     required this.category,
+    this.language = 'fa',
+    this.level,
     this.rating = 0.0,
     this.ratingCount = 0,
     this.isDownloaded = false,
     this.downloadedAt,
   });
 
-  /// حجم به صورت خوانا (KB/MB)
   String get readableSize {
     if (fileSize < 1024) return '$fileSize B';
     if (fileSize < 1024 * 1024) {
@@ -41,6 +44,42 @@ class BookModel {
       return '${(fileSize / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(fileSize / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  /// برچسب فارسی سطح
+  String get levelLabelFa {
+    switch (level) {
+      case 'beginner':
+        return 'مبتدی';
+      case 'elementary':
+        return 'پایه';
+      case 'intermediate':
+        return 'متوسط';
+      case 'upper':
+        return 'متوسط بالا';
+      case 'advanced':
+        return 'پیشرفته';
+      default:
+        return level ?? '';
+    }
+  }
+
+  /// رنگ سطح
+  int get levelColorValue {
+    switch (level) {
+      case 'beginner':
+        return 0xFF4CAF50; // سبز
+      case 'elementary':
+        return 0xFF8BC34A; // سبز روشن
+      case 'intermediate':
+        return 0xFFFF9800; // نارنجی
+      case 'upper':
+        return 0xFFFF5722; // نارنجی تیره
+      case 'advanced':
+        return 0xFFF44336; // قرمز
+      default:
+        return 0xFF9E9E9E;
+    }
   }
 
   Map<String, dynamic> toMap() {
@@ -55,6 +94,8 @@ class BookModel {
       'file_size': fileSize,
       'type': type,
       'category': category,
+      'language': language,       // 👈 جدید
+      'level': level,              // 👈 جدید
       'rating': rating,
       'rating_count': ratingCount,
       'is_downloaded': isDownloaded ? 1 : 0,
@@ -74,6 +115,8 @@ class BookModel {
       fileSize: (map['file_size'] as num?)?.toInt() ?? 0,
       type: map['type'] ?? 'pdf',
       category: map['category'] ?? '',
+      language: map['language'] ?? 'fa',     // 👈 جدید
+      level: map['level'] as String?,         // 👈 جدید
       rating: (map['rating'] as num?)?.toDouble() ?? 0.0,
       ratingCount: (map['rating_count'] as num?)?.toInt() ?? 0,
       isDownloaded: map['is_downloaded'] == 1,
@@ -94,6 +137,8 @@ class BookModel {
     int? fileSize,
     String? type,
     String? category,
+    String? language,
+    String? level,
     double? rating,
     int? ratingCount,
     bool? isDownloaded,
@@ -110,6 +155,8 @@ class BookModel {
       fileSize: fileSize ?? this.fileSize,
       type: type ?? this.type,
       category: category ?? this.category,
+      language: language ?? this.language,
+      level: level ?? this.level,
       rating: rating ?? this.rating,
       ratingCount: ratingCount ?? this.ratingCount,
       isDownloaded: isDownloaded ?? this.isDownloaded,
